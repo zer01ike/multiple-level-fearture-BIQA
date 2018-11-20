@@ -18,7 +18,7 @@ saver = tf.train.Saver()
 X_test = np.ones((1,224,224,3))
 with tf.Session() as sess:
     saver.restore(sess,path_to_ckpt)
-    spacific_tensor = sess.graph.get_tensor_by_name('resnet_v1_50/conv1:0')
+    spacific_tensor = sess.graph.get_tensor_by_name('resnet_v1_50/block2/unit_3/bottleneck_v1/conv2/BatchNorm/moving_mean:0')
     #img = image.load_img('',target_size=(224,224))
     features = sess.run(spacific_tensor,{'Placeholder:0':X_test})
     print(features.shape)
