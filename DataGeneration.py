@@ -67,6 +67,16 @@ def datageneration():
 
     return x_train,y_train
 
+def get_all_mean_val(dir,file_num):
+    mean = np.zeros([3],dtype=np.float32)
+
+    for i in range(0,file_num):
+        image_each = dir+str(i)+".png"
+        mean +=np.mean(image_each,axis=(0,1))
+
+
+
+
 if __name__ == '__main__':
     # image,score = image_score()
     # score_list = []
