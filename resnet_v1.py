@@ -103,6 +103,7 @@ def bottleneck(inputs,
     The ResNet unit's output.
   """
   with variable_scope.variable_scope(scope, 'bottleneck_v1', [inputs]) as sc:
+      #检查是否具有4个维度
     depth_in = utils.last_dimension(inputs.get_shape(), min_rank=4)
     if depth == depth_in:
       shortcut = resnet_utils.subsample(inputs, stride, 'shortcut')

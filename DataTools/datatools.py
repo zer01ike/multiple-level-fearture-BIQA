@@ -37,6 +37,35 @@ def preporcessing(data_dir,summary_file,meanpatch_file,train_percent,test_percen
 
     return X_train, Y_train,X_test,Y_test
 
+def generatelist(data_dir,train_dir,meanpath_dir):
+    X=[]
+    Y=[]
+    with open(train_dir,'r') as train:
+        lines = train.readlines()
+        for line in lines:
+            line = line.replace("\n","")
+            dmos, name = line.split(" ")
+            class_name = name.split("_")[0]
+            X.append(data_dir+name)
+            Y.append(dmos)
+    meanBatch = readImage(meanpath_dir)
+
+    return X,Y,meanBatch
+
+
+def readBatchSizeImage(start,batch_size,X,Y,meanBatch):
+    X_train = []
+    Y_train = []
+
+    for x,y in zip(X[start:start+batch_size],Y[start:start+batch_size]):
+        X_train.append(readImage(x) - meanBatch)
+        Y_train.append([y])
+
+    X_train = np.array(X_train)
+    Y_train = np.array(Y_train)
+
+    return X_train,Y_train
+
 def generateTrainTest(data_dir,summary_file,train_percent,test_percent):
     X=[]
     Y=[]
@@ -44,6 +73,17 @@ def generateTrainTest(data_dir,summary_file,train_percent,test_percent):
     Y_train = []
     X_test = []
     Y_test = []
+
+    train_file = "/home/wangkai/Paper_MultiFeature_Data/databaserelease2/train.txt"
+    test_file = "/home/wangkai/Paper_MultiFeature_Data/databaserelease2/test.txt"
+
+    train_instance = open(train_file,'w')
+    test_instance = open(test_file,'w')
+
+    X_train_np = np.empty([0,224,224,3])
+    X_test_np = np.empty([0,224,224,3])
+    Y_train_np = np.empty([0,1])
+    Y_test_np = np.empty([0,1])
 
     # need to make sure the ref category is ok
     # so split method is base on the percentge of ref images
@@ -77,25 +117,44 @@ def generateTrainTest(data_dir,summary_file,train_percent,test_percent):
     print("Train Category Contain:".ljust(25)+str(train_category))
     print("Test Category Contain:".ljust(25)+str(test_category))
 
+
+    counter = 0
+    total = len(X)
+
     for unsplit_x,unsplit_y in zip(X,Y):
         isTrain = True if unsplit_x.split("_")[0] in train_category else False
         isTest = True if unsplit_x.split("_")[0] in test_category else False
         if isTrain :
             X_train.append(readImage(str(data_dir+unsplit_x)))
-            Y_train.append(unsplit_y)
+            #X_train_np = np.append(X_train_np,readImage(str(data_dir+unsplit_x))[np.newaxis,:,:,:],axis=0)
+            Y_train.append([unsplit_y])
+            #y = np.array([unsplit_y])
+            #Y_train_np = np.append(Y_train_np,y[np.newaxis,:],axis=0)
+            train_instance.write(str(unsplit_y)+" "+unsplit_x+"\n")
         elif isTest :
             X_test.append(readImage(str(data_dir+unsplit_x)))
-            Y_test.append(unsplit_y)
+            #X_test_np = np.append(X_test_np,readImage(str(data_dir+unsplit_x))[np.newaxis,:,:,:],axis =0)
+            Y_test.append([unsplit_y])
+            #y = np.array([unsplit_y])
+            #Y_test_np = np.append(Y_test_np, y[np.newaxis, :], axis=0)
+            test_instance.write(str(unsplit_y) + " " + unsplit_x+"\n")
+        counter +=1
 
-    X_train = np.array(X_train)
-    Y_train = np.array(Y_train)
-    X_test = np.array(X_test)
-    Y_test = np.array(Y_test)
+        if counter % 100 == 0:
+            print("read_image:".ljust(15) + str(counter).rjust(6) + "/" + str(total).ljust(10))
 
-    print("X_train_size:".ljust(25)+str(len(X_train)) +"  "+ str(X_train.shape) )
-    print("Y_train_size:".ljust(25) + str(len(Y_train))+"  "+ str(Y_train.shape))
-    print("X_test_size:".ljust(25) + str(len(X_test))+"  "+ str(X_test.shape))
-    print("Y_test_size:".ljust(25) + str(len(Y_test))+"  "+ str(Y_test.shape))
+    # X_train = np.array(X_train)
+    # Y_train = np.array(Y_train)
+    # X_test = np.array(X_test)
+    # Y_test = np.array(Y_test)
+
+    train_instance.close()
+    test_instance.close()
+    print("X_train_size:".ljust(25)+ str(len(X_train)).ljust(8) + "Y_train_size:".ljust(25) + str(len(Y_train)))
+    print("X_test_size:".ljust(25) + str(len(X_test)).ljust(8) + "Y_test_size:".ljust(25) + str(len(Y_test)))
+    # print("X_train_size:".ljust(25) + str(X_train_np.shape[0]).ljust(8) + "Y_train_size:".ljust(25) + str(Y_train_np.shape[0]))
+    # print("X_test_size:".ljust(25) + str(X_test_np.shape[0]).ljust(8) + "Y_test_size:".ljust(25) + str(Y_test_np.shape[0]))
+
     return X_train,Y_train,X_test,Y_test
 
 def minusMeanPtacth(X_train,X_test,meanPatch):
