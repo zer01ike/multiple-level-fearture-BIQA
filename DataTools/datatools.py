@@ -328,10 +328,24 @@ def test_shuffleList():
     Y=[11,12,13,14,15,16,17]
     print(shuffleList(X,Y))
 
+def test_readbatchsizeimage():
+    train_file = "/home/wangkai/Paper_MultiFeature_Data/databaserelease2/train.txt"
+    data_dir = "/home/wangkai/Paper_MultiFeature_Data/databaserelease2/Patched_data/"
+    mean_patch_file = "/home/wangkai/Paper_MultiFeature_Data/databaserelease2/average_mean.png"
+    X,Y,batchfile = generatelist(data_dir, train_file, mean_patch_file)
+
+    X_train,Y_train = readBatchSizeImage(0,8,X,Y,batchfile)
+    cv2.namedWindow("test_im")
+    cv2.imshow("test_im",X_train[7])
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
+
+
 if __name__ == '__main__':
     #cropImage()
     #test_generateinfofile()
     #test_generateTrainTest()
     #test_imageread()
     #test_shuffleList()
+    test_readbatchsizeimage()
     pass
