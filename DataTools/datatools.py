@@ -1,6 +1,7 @@
 import tensorflow as tf
 import cv2
 import numpy as np
+import random
 
 tf.logging.set_verbosity(tf.logging.INFO)
 
@@ -269,6 +270,20 @@ def cropImagerandom_tf(imagesinfo,num):
 
             index +=1
 
+def shuffleList(X,Y):
+    if len(X) != len(Y):
+        print("Error: The length of X and Y is Not Equal!")
+        exit(25)
+    random_seed = random.randint(0,100)
+    random.seed(random_seed)
+    random.shuffle(X)
+    random.seed(random_seed)
+    random.shuffle(Y)
+
+    return X,Y
+
+
+
 
 ###################################test case ##############33
 
@@ -308,9 +323,15 @@ def test_imageread():
     a = readImage("/home/wangkai/Paper_MultiFeature_Data/databaserelease2/Patched_data/bikes_jp2k_img15_0.png")
     b = readImage("/home/wangkai/Paper_MultiFeature_Data/databaserelease2/Patched_data/bikes_jp2k_img15_0.png")
 
+def test_shuffleList():
+    X=[1,2,3,4,5,6,7]
+    Y=[11,12,13,14,15,16,17]
+    print(shuffleList(X,Y))
+
 if __name__ == '__main__':
     #cropImage()
     #test_generateinfofile()
     #test_generateTrainTest()
     #test_imageread()
+    #test_shuffleList()
     pass
