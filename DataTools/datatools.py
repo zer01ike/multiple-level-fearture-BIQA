@@ -1,7 +1,15 @@
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+
 import tensorflow as tf
+#tf.enable_eager_execution()
+import tensorflow as tf
+from PIL import Image
 import cv2
 import numpy as np
 import random
+import base64
 
 tf.logging.set_verbosity(tf.logging.INFO)
 
@@ -60,6 +68,7 @@ def readBatchSizeImage(start,batch_size,X,Y,meanBatch):
 
     for x,y in zip(X[start:start+batch_size],Y[start:start+batch_size]):
         X_train.append(readImage(x) - meanBatch)
+        #X_train.append(readImage(x))
         Y_train.append([y])
 
     X_train = np.array(X_train)
@@ -282,6 +291,85 @@ def shuffleList(X,Y):
 
     return X,Y
 
+def savedasTfRecord():
+    def _bytes_feature(value):
+        """Returns a bytes_list from a string / byte."""
+        return tf.train.Feature(bytes_list=tf.train.BytesList(value=[value]))
+
+    def _float_feature(value):
+        """Returns a float_list from a float / double."""
+        return tf.train.Feature(float_list=tf.train.FloatList(value=[value]))
+
+    def _int64_feature(value):
+        """Returns an int64_list from a bool / enum / int / uint."""
+        return tf.train.Feature(int64_list=tf.train.Int64List(value=[value]))
+
+    def save(file_dir,name):
+        data_dir = "/home/wangkai/Paper_MultiFeature_Data/databaserelease2/Patched_data/"
+        mean_patch_file = "/home/wangkai/Paper_MultiFeature_Data/databaserelease2/average_mean.png"
+        X, Y, batchfile = generatelist(data_dir, train_file, mean_patch_file)
+
+        writer = tf.python_io.TFRecordWriter(name)
+
+        batch = Image.open(mean_patch_file)
+        batch = np.array(batch)
+        count = 0
+        for im_dir, demos in zip(X, Y):
+            image = Image.open(im_dir)
+            width,height = image.size
+            count +=1
+            image = np.array(image)
+            image_raw = Image.fromarray(image-batch).tobytes()
+
+
+            feature = {
+                'height': _int64_feature(height),
+                'width': _int64_feature(width),
+                'channel': _int64_feature(3),
+                'dmos': _float_feature(float(demos)),
+                'image_raw': _bytes_feature(image_raw)
+            }
+
+            tf_example = tf.train.Example(features=tf.train.Features(feature=feature))
+            writer.write(tf_example.SerializeToString())
+            print("write:".ljust(10) + str(count)+"Down!".rjust(4))
+        writer.close()
+
+    train_name = "/home/wangkai/Paper_MultiFeature_Data/TFrecords/train.tfrecords"
+    train_file = "/home/wangkai/Paper_MultiFeature_Data/databaserelease2/train.txt"
+    test_name = "/home/wangkai/Paper_MultiFeature_Data/TFrecords/test.tfrecords"
+    test_file = "/home/wangkai/Paper_MultiFeature_Data/databaserelease2/test.txt"
+
+    save(train_file,train_name)
+    save(test_file,test_name)
+
+
+def readTfRecord():
+    # TODO ::need to be down
+    train_name = "/home/wangkai/Paper_MultiFeature_Data/TFrecords/train.tfrecords"
+    test_name = "/home/wangkai/Paper_MultiFeature_Data/TFrecords/test.tfrecords"
+    def read(name):
+        record_iterator = tf.python_io.tf_record_iterator(path=name)
+
+        train_X =[]
+        train_Y =[]
+
+        for string_record in record_iterator:
+            example = tf.train.Example()
+            example.ParseFromString(string_record)
+
+            label = example.features.feature['']
+        reader = tf.TFRecordReader()
+        _ ,serialized_example = reader.read(name)
+        features = tf.parse_single_example(serialized_example,
+                                           features={
+                                               'height': tf.FixedLenFeature([],tf.int64),
+                                               'width': tf.FixedLenFeature([],tf.int64),
+                                               'channel': tf.FixedLenFeature([],tf.int64),
+                                               'dmos': tf.FixedLenFeature([],tf.float32),
+                                               'image_raw': tf.FixedLenFeature([],tf.string)
+                                           })
+
 
 
 
@@ -340,6 +428,17 @@ def test_readbatchsizeimage():
     cv2.waitKey(0)
     cv2.destroyAllWindows()
 
+def test_readtestImage():
+    test_file = "/home/wangkai/Paper_MultiFeature_Data/databaserelease2/test.txt"
+    data_dir = "/home/wangkai/Paper_MultiFeature_Data/databaserelease2/Patched_data/"
+    mean_patch_file = "/home/wangkai/Paper_MultiFeature_Data/databaserelease2/average_mean.png"
+    X_test, Y_test, meanBatch = generatelist(data_dir, test_file, mean_patch_file)
+    X_test_np, Y_test_np = readBatchSizeImage(0, len(X_test), X_test, Y_test, meanBatch)
+    cv2.namedWindow("test_image")
+    for i in range(len(X_test)):
+        cv2.imshow("test_image",X_test_np[i])
+        cv2.waitKey(500)
+    cv2.destroyAllWindows()
 
 if __name__ == '__main__':
     #cropImage()
@@ -347,5 +446,7 @@ if __name__ == '__main__':
     #test_generateTrainTest()
     #test_imageread()
     #test_shuffleList()
-    test_readbatchsizeimage()
+    #test_readbatchsizeimage()
+    #savedasTfRecord()
+    test_readtestImage()
     pass
