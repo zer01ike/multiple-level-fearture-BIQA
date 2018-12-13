@@ -65,14 +65,17 @@ def generatelist(data_dir,train_dir,meanpath_dir):
 def readBatchSizeImage(start,batch_size,X,Y,meanBatch):
     X_train = []
     Y_train = []
+    meanBatch_a = np.array(meanBatch)
+    meanBatch = np.tile(meanBatch_a, (224, 224, 1))
 
     for x,y in zip(X[start:start+batch_size],Y[start:start+batch_size]):
         X_train.append(readImage(x) - meanBatch)
         #X_train.append(readImage(x))
-        Y_train.append([y])
+        t = y if float(y) - 0.0 > 0.000001 else 0.000000001
+        Y_train.append([t])
 
-    X_train = np.array(X_train)
-    Y_train = np.array(Y_train)
+    X_train = np.array(X_train).astype(np.float32)
+    Y_train = np.array(Y_train).astype(np.float32)
 
     return X_train,Y_train
 
@@ -193,6 +196,7 @@ def generateMeanpatch(patch_dir):
     total = np.array([len(Patchs),len(Patchs),len(Patchs)])
 
     all_mean = np.true_divide(sum_mean,total)
+    print(all_mean)
 
     average_patch = np.tile(all_mean, (224, 224, 1))
 
@@ -242,7 +246,9 @@ def readImage(patch):
     if image is None:
         print("error Read:".ljust(10) + patch)
         exit(15)
-
+    # cv2.cvtColor(image, image, CV_BGR2GRAY)
+    # float
+    image.astype(np.float32)
     return image
 
 
@@ -392,7 +398,7 @@ def test_cropImage():
     cropImagerandom_tf(imageinfo[0:5],50)
 
 def test_generateMeanpatch():
-    data_dir = "/home/wangkai/Paper_MultiFeature_Data/databaserelease2/Patched_data/"
+    data_dir = "/home/wangkai/Patched_data/"
     average_image = generateMeanpatch(data_dir)
     cv2.imwrite("average_mean.png",average_image)
 
@@ -448,5 +454,9 @@ if __name__ == '__main__':
     #test_shuffleList()
     #test_readbatchsizeimage()
     #savedasTfRecord()
-    test_readtestImage()
+    #test_readtestImage()
+    test_generateMeanpatch()
+    mean_B = 100.53879493
+    mean_G = 116.90216511
+    mean_R = 125.75822915
     pass
