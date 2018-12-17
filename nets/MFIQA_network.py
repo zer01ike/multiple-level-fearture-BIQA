@@ -4,6 +4,8 @@ import tensorflow as tf
 import tensorflow.contrib.slim as slim
 from tensorflow.contrib.slim.nets import resnet_v1
 from tensorflow.contrib import layers as layers_lib
+from tensorflow.contrib.layers.python.layers import layers
+from tensorflow.python.ops import math_ops
 
 class MFIQA_network(object):
 
@@ -18,12 +20,12 @@ class MFIQA_network(object):
     
     def init(self):
         current_epoch = tf.Variable(0,name="current_epoch")
-        MFIQA_list = self.get_resent50_var()
-        return current_epoch,MFIQA_list
+
+        return current_epoch
         
     
     def inference(self,image):
-        self.resnet_reload(image)
+        net,end_points = self.resnet_reload(image)
         tensor_out = self.finetune_layers()
         return tensor_out
 
@@ -38,9 +40,12 @@ class MFIQA_network(object):
             
             tensor_out = layers_lib.fully_connected(concat, 1, activation_fn=tf.nn.relu, scope="fintune_FC")
             return tensor_out
-    def resnet_reload(self,inputs_X):
+
+    def resnet_reload(self,image):
         with slim.arg_scope(resnet_v1.resnet_arg_scope()):
-            net, end_points = resnet_v1.resnet_v1_50(inputs_X,is_training=False)
+            net, end_points = resnet_v1.resnet_v1_50(image,is_training=False)
+        return net,end_points
+
     def encoder(self,tensor_name,layer_name):
         with tf.variable_scope(layer_name):
             encoder_tensor = tf.get_default_graph().get_tensor_by_name(tensor_name)
@@ -58,35 +63,43 @@ class MFIQA_network(object):
             return out_tensor
     
     def get_resent50_var(self):
-        target_tensor_list=[self.encoder_paramater["encoder1"],
-        self.encoder_paramater["encoder2"],
-        self.encoder_paramater["encoder3"],
-        self.encoder_paramater["encoder4"]]
-        all_list = []
-        all_var = []
+        # target_tensor_list=[self.encoder_paramater["encoder1"],
+        # self.encoder_paramater["encoder2"],
+        # self.encoder_paramater["encoder3"],
+        # self.encoder_paramater["encoder4"]]
+        # all_list = []
+        # all_var = []
+        # result_var = []
+        # # 遍历所有变量，node.name得到变量名称
+        # # 不使用tf.trainable_variables()，因为batchnorm的moving_mean/variance不属于可训练变量
+        # for var in tf.global_variables():
+        #     #print(var.name)
+        #     if var != []:
+        #         if "/" not in var.name: continue
+        #         all_list.append(var.name)
+        #         all_var.append(var)
+        #
+        # all_list = list(map(lambda x: x.split("/")[1], all_list))
+        #
+        # for target_tensor in target_tensor_list:
+        #     target = target_tensor.split("/")[1]
+        #     try:
+        #         # 查找对应变量作用域的索引
+        #         ind = all_list[::-1].index(target)
+        #         ind = len(all_list) - ind - 1
+        #         #print(ind)
+        #         #del all_list
+        #         #return all_var[:ind + 1]
+        #         result_var+=all_var[:ind+1]
+        #     except:
+        #         print("target_tensor is not exist!")
+        # return list(set(result_var))
         result_var = []
-        # 遍历所有变量，node.name得到变量名称
-        # 不使用tf.trainable_variables()，因为batchnorm的moving_mean/variance不属于可训练变量
-        for var in tf.global_variables():
+        global_var = tf.global_variables()
+        for var in global_var:
             #print(var.name)
-            if var != []:
-                if "/" not in var.name: continue
-                all_list.append(var.name)
-                all_var.append(var)
+            if 'resnet_v1_50' in var.name and 'Momentum' not in var.name:
+                result_var.append(var)
+        return result_var
 
-        all_list = list(map(lambda x: x.split("/")[1], all_list))
-
-        for target_tensor in target_tensor_list:
-            target = target_tensor.split("/")[1]
-            try:
-                # 查找对应变量作用域的索引
-                ind = all_list[::-1].index(target)
-                ind = len(all_list) - ind - 1
-                #print(ind)
-                #del all_list
-                #return all_var[:ind + 1]
-                result_var+=all_var[:ind+1]
-            except:
-                print("target_tensor is not exist!")
-        return list(set(result_var))
     

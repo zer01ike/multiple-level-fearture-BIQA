@@ -18,18 +18,18 @@ from scipy.stats import pearsonr
 os.environ['CUDA_VISIBLE_DEVICES']='1'
 
 tf.logging.set_verbosity(tf.logging.INFO)
-mean_B = 100.53879493
-mean_G = 116.90216511
-mean_R = 125.75822915
+mean_B = 103.94
+mean_G = 116.78
+mean_R = 123.68
 
 
 ### dir location
-root_dir = "/home/wangkai/"
+root_dir = "/home/wangkai/Paper_MultiFeature_Data/"
 train_txt = "databaserelease2/train.txt"
 test_txt = "databaserelease2/test.txt"
-data_dir =  "Patched_data/"
+data_dir =  "databaserelease2/Patched_data/"
 mean_file = "databaserelease2/average_mean.png"
-path_to_ckpt = "/home/wangkai/disk_seg/Paper_MultiFeature_Data/resnet/resnet_v1_50.ckpt"
+path_to_ckpt = "/home/wangkai/Paper_MultiFeature_Data/resnet/resnet_v1_50.ckpt"
 
 def test_accuracy(predictions,Y_test):
     count = 0
@@ -50,9 +50,9 @@ def test_accuracy(predictions,Y_test):
             sum_pre += predictions[i]
             sum_test += float(Y_test[i])
     
-    p,srcc = spearmanr(pre_list,gt_list)
-    p,plcc = pearsonr(pre_list,gt_list)
-    return error,srcc,plcc
+    p,srcc = spearmanr(pre_list, gt_list)
+    p,plcc = pearsonr(pre_list, gt_list)
+    return error, srcc, plcc
 
 def net_graph(inputs_X):
     def encoder(tensor_name, layer_name):
@@ -69,7 +69,7 @@ def net_graph(inputs_X):
             return out_tensor
 
     with slim.arg_scope(resnet_v1.resnet_arg_scope()):
-        net, end_points = resnet_v1.resnet_v1_50(inputs_X, is_training=True)
+        net, end_points = resnet_v1.resnet_v1_50_(inputs_X, is_training=True)
 
     #orginal net
     with tf.variable_scope("encoder"):
@@ -116,8 +116,7 @@ def net_graph_debug(inputs_X):
         predictions = layers_lib.fully_connected(concat, 1, activation_fn=tf.nn.relu, scope="fintune_FC")
         current_epoch = tf.Variable(0, name="current_epoch")
 
-    return predictions,current_epoch
-    return end_points,current_epoch
+    return predictions, current_epoch
 
 
 def inference(x):
@@ -242,7 +241,7 @@ if __name__ == '__main__':
 
     batch_size = 256
     epochs = 100
-    epochs_steps = 2
+    epochs_steps = 10
     height = 224
     width = 224
     channels = 3
@@ -255,7 +254,7 @@ if __name__ == '__main__':
     tf.reset_default_graph()
 
     # define the tensor for inputs
-    inputs_X = tf.placeholder(tf.float32, shape=[batch_size, height, width, channels],name='x_input')
+    inputs_X = tf.placeholder(tf.float32, shape=[batch_size, height, width, channels], name='x_input')
     #tf.add_to_collection("inputs",inputs_X)
     # define the tensor for values
     inputs_Y = tf.placeholder(tf.float32, (batch_size, 1))
@@ -296,20 +295,24 @@ if __name__ == '__main__':
     for i in tf.global_variables():
         if 'Momentum' in i.name :
             tf.add_to_collection("encoder_var", i)
-
+        elif 'block4' in i.name:
+            tf.add_to_collection("encoder_var", i)
+        elif 'block3' in i.name:
+            tf.add_to_collection("encoder_var", i)
     train_var = tf.get_collection("encoder_var")
     
     strtime = str(time.localtime().tm_mday) +"-"+str(time.localtime().tm_hour) +"-"+str(time.localtime().tm_min)
     session_file = open("session_file-"+strtime+".txt",'w')
 
-    x_train_test = np.random.randint(0,255,size=(256,224,224,3))
-    y_train_test = np.random.randint(0,255,size=(256,1))
-    y_train_test = y_train_test/256.0
-    with tf.Session(config=tf.ConfigProto(allow_soft_placement=True)) as sess:
+    #x_train_test = np.random.randint(0,255,size=(256,224,224,3))
+    #y_train_test = np.random.randint(0,255,size=(256,1))
+    #y_train_test = y_train_test/256.0
+    gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction =0.8)
+    with tf.Session(config=tf.ConfigProto(gpu_options = gpu_options)) as sess:
         saver = tf.train.Saver(var_list=resnet50_list)
         writer = tf.summary.FileWriter(r"./logs/batch128epochs40", sess.graph)
-        #sess.run(tf.global_variables_initializer())
-        sess.run(tf.variables_initializer(var_list=train_var))
+        sess.run(tf.global_variables_initializer())
+        #sess.run(tf.variables_initializer(var_list=train_var))
         saver.restore(sess, path_to_ckpt)
         total_step = 1
         
@@ -342,13 +345,18 @@ if __name__ == '__main__':
                 #         15)+"  predictions[0] = " + str(predictions_v[0][0]).ljust(
                 #         15))
                 pre_str = str(e)+":"+str(batch_index)+":"
-                if batch_index % (batch_size * 4) == 0:
+                if batch_index % batch_size == 0:
                     total_step += 1
                     writer.add_summary(summary_v, total_step)
+                    sum_pre = np.sum(predictions_v[:,0])/batch_size
+                    sum_gt = np.sum(score_v[:,0])/batch_size
+
                     print("++Train::Eopchs = " + str(e).ljust(15) +
                           "Steps = " + str(batch_index).ljust(15) +
                           "Loss = " + str(losses).ljust(15) +
-                          "predictions = " + str(predictions_v[0][0]).ljust(15))
+                          "mean_prediction = " + str(sum_pre).ljust(20)+
+                          "mean_gt = " + str(sum_gt).ljust(20))
+
                     for pre_index in range(batch_size):
                         pre_str +=" "+str(predictions_v[pre_index][0])+"-"
                     # session_file.write("++Train::Eopchs = " + str(e).ljust(15) +
@@ -388,6 +396,6 @@ if __name__ == '__main__':
 
             #print("total_lossess = "+str(losses).ljust(15)+"  predictions[0] = "+str(predictions_v[0][0]).ljust(15))
 
-            #save_path = saver.save(sess, "save/batch256epochs10/model.ckpt", global_step=e)
+            save_path = saver.save(sess, "save/batch256epochs10/model.ckpt", global_step=e)
     session_file.close()
 
