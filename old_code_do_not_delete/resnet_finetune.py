@@ -3,10 +3,10 @@
 from tensorflow.contrib.slim.nets import resnet_v1
 from tensorflow.contrib import layers as layers_lib
 from tensorflow.python.ops import math_ops
-from DataTools.datatools import preporcessing
-from DataTools.datatools import generatelist
-from DataTools.datatools import readBatchSizeImage
-from DataTools.datatools import shuffleList
+from old_code_do_not_delete.DataTools.datatools import preporcessing
+from old_code_do_not_delete.DataTools.datatools import generatelist
+from old_code_do_not_delete.DataTools.datatools import readBatchSizeImage
+from old_code_do_not_delete.DataTools.datatools import shuffleList
 from tensorflow.contrib.layers.python.layers import layers
 import tensorflow as tf
 import tensorflow.contrib.slim as slim
@@ -182,10 +182,13 @@ def train(total_loss,current_epoch,train_V):
     '''
 
 
-    learing_rate = tf.train.exponential_decay(0.0001,
-                                              current_epoch,
-                                              decay_steps=epochs_steps,
-                                              decay_rate=0.1)
+    # learing_rate = tf.train.exponential_decay(0.0001,
+    #                                           current_epoch,
+    #                                           decay_steps=epochs_steps,
+    #                                           decay_rate=0.1)
+
+    learing_rate = tf.Variable(0.001, trainable=False, dtype=tf.float32)
+    learing_rate_decy = learing_rate.assign(tf.multiply(learing_rate,0.1))
 
     momOp= tf.train.MomentumOptimizer(learning_rate=learing_rate,momentum=0.9)
     train_step = momOp.minimize(total_loss,var_list=train_V,global_step=current_epoch)
@@ -193,7 +196,7 @@ def train(total_loss,current_epoch,train_V):
     #                                                                                     global_step=current_epoch)
     #tf.summary.scalar("learning_rate", learing_rate)
     tf.summary.histogram('learing_rate',learing_rate)
-    return train_step
+    return train_step,learing_rate_decy
 
 def evaluate(sess,x,y):
     '''
@@ -239,9 +242,9 @@ def get_resent50_var(target_tensor_list = None):
 
 if __name__ == '__main__':
 
-    batch_size = 256
+    batch_size = 32
     epochs = 100
-    epochs_steps = 10
+    epochs_steps = 1
     height = 224
     width = 224
     channels = 3
@@ -271,7 +274,7 @@ if __name__ == '__main__':
 
     meanBatch = [mean_B,mean_G,mean_R]
 
-    # X_test,Y_test,X_test_np,Y_test_np=inputs_data_test()
+    X_test,Y_test,X_test_np,Y_test_np=inputs_data_test()
 
     total_loss = loss(inputs_Y, predictions)
 
@@ -290,7 +293,7 @@ if __name__ == '__main__':
     train_var = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope="encoder")
     for var_i in train_var:
         tf.add_to_collection("encoder_var",var_i)
-    train_step = train(total_loss, current_epoch,train_var)
+    train_step, learing_rate_decy = train(total_loss, current_epoch,train_var)
 
     for i in tf.global_variables():
         if 'Momentum' in i.name :
@@ -336,8 +339,8 @@ if __name__ == '__main__':
                 if start + batch_size > len(X):
                     start = len(X) - batch_size
                 x_train, y_train = readBatchSizeImage(start, batch_size, X, Y, meanBatch)
-                _, losses, score_v, predictions_v, summary_v = sess.run(
-                    [train_step, total_loss, inputs_Y, predictions, merge_all],
+                _, losses, score_v, predictions_v, summary_v,learing_rate_v = sess.run(
+                    [train_step, total_loss, inputs_Y, predictions, merge_all,learing_rate_decy],
                     feed_dict={inputs_X: x_train,
                                inputs_Y: y_train})
                 # print(
@@ -353,9 +356,10 @@ if __name__ == '__main__':
 
                     print("++Train::Eopchs = " + str(e).ljust(15) +
                           "Steps = " + str(batch_index).ljust(15) +
+                          "learning_rate = " + str(learing_rate_v).ljust(15) +
                           "Loss = " + str(losses).ljust(15) +
-                          "mean_prediction = " + str(sum_pre).ljust(20)+
-                          "mean_gt = " + str(sum_gt).ljust(20))
+                          "mean_prediction = " + str(sum_pre).ljust(25)+
+                          "mean_gt = " + str(sum_gt).ljust(25))
 
                     for pre_index in range(batch_size):
                         pre_str +=" "+str(predictions_v[pre_index][0])+"-"
@@ -367,30 +371,30 @@ if __name__ == '__main__':
 
             # test sequence
             # -------------------------------------------------------------------------------
-            # predictions_sum = []
-            # for start_index in range(0, len(X_test), batch_size):
-            #     start = start_index
-            #     if start + batch_size > len(X_test):
-            #         start = len(X_test) - batch_size
-            #     x_inputs = X_test_np[start:start_index + batch_size]
-            #     predictions_test = sess.run(predictions, feed_dict={inputs_X: x_inputs})
-            #     batch_str = ''
-            #     for index in range(0,batch_size):
-            #         batch_str += str(predictions_test[index][0])+" "
-            #         predictions_sum.append(predictions_test[index][0])
-            #     print("start:"+batch_str)
+            predictions_sum = []
+            for start_index in range(0, len(X_test), batch_size):
+                start = start_index
+                if start + batch_size > len(X_test):
+                    start = len(X_test) - batch_size
+                x_inputs = X_test_np[start:start_index + batch_size]
+                predictions_test = sess.run(predictions, feed_dict={inputs_X: x_inputs})
+                batch_str = ''
+                for index in range(0,batch_size):
+                    batch_str += str(predictions_test[index][0])+" "
+                    predictions_sum.append(predictions_test[index][0])
+                print("start:"+batch_str)
 
 
-            # error,srcc,plcc = test_accuracy(predictions_sum,Y_test)
-            # print("--TEST::epochs = " + str(e+1).ljust(15) +
-            #       "error = " + str(error).ljust(15)+
-            #       "srcc = " + str(srcc).ljust(15)+
-            #       "plcc = " + str(plcc).ljust(15))
-            # session_file.write("--TEST::epochs = " + str(e+1).ljust(15) +
-            #       "error = " + str(error).ljust(15)+
-            #       "srcc = " + str(srcc).ljust(15)+
-            #       "plcc = " + str(plcc).ljust(15)+"\n")
-            # save_path = saver.save(sess, "save/batch256epochs10/model"+str(e)+".ckpt")
+            error,srcc,plcc = test_accuracy(predictions_sum,Y_test)
+            print("--TEST::epochs = " + str(e+1).ljust(15) +
+                  "error = " + str(error).ljust(15)+
+                  "srcc = " + str(srcc).ljust(15)+
+                  "plcc = " + str(plcc).ljust(15))
+            session_file.write("--TEST::epochs = " + str(e+1).ljust(15) +
+                  "error = " + str(error).ljust(15)+
+                  "srcc = " + str(srcc).ljust(15)+
+                  "plcc = " + str(plcc).ljust(15)+"\n")
+            save_path = saver.save(sess, "save/batch256epochs10/model"+str(e)+".ckpt")
             #---------------------------------------------------------------------------------
             #test sequence end
 

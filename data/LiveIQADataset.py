@@ -8,15 +8,18 @@ import matplotlib.pyplot as plt
 
 class LiveIQADataset(object):
     def __init__(self, mode, batch_size=1, shuffle=True, crop_size=50,num_epochs=10,crop_shape=[224,224,3]):
-        # check read mode
-        if mode == 'training':
-            self.path_to_db = '/home/wangkai/Paper_MultiFeature_Data/databaserelease2/train.tfrecord'
-            self.train = True
-        elif mode == 'test':
-            self.path_to_db = '/home/wangkai/Paper_MultiFeature_Data/databaserelease2/test.tfrecord'
-            self.train = False
-        else:
-            assert 0, "Unknown dataset mode."
+        # # check read mode
+        # if mode == 'training':
+        #     self.path_to_db = '/home/wangkai/Paper_MultiFeature_Data/databaserelease2/train.tfrecord'
+        #     self.train = True
+        # elif mode == 'test':
+        #     self.path_to_db = '/home/wangkai/Paper_MultiFeature_Data/databaserelease2/test.tfrecord'
+        #     self.train = False
+        # else:
+        #     assert 0, "Unknown dataset mode."
+
+        self.path_to_train_db = '/home/wangkai/Paper_MultiFeature_Data/databaserelease2/train.tfrecord'
+        self.path_to_test_db = '/home/wangkai/Paper_MultiFeature_Data/databaserelease2/test.tfrecord'
 
         self.image_dir = ' '
         self.iqa_dir = '/home/wangkai/Paper_MultiFeature_Data/databaserelease2/'
@@ -29,6 +32,7 @@ class LiveIQADataset(object):
         self.means = [103.94,116.78,123.68]
 
     def example(self):
+        dataset = tf.data.TFRecordDataset([self.path_to_db])
         reader = tf.TFRecordReader()
         _,value = reader.read(tf.train.string_input_producer([self.path_to_db], num_epochs=self.num_epochs,
                                                   shuffle=self.shuffle))
@@ -50,13 +54,30 @@ class LiveIQADataset(object):
         img = tf.reshape(img, [hight, width, channel])
 
         # pass
-        # TODO:需要添加random crop操作
         img = tf.random_crop(img,self.crop_shape)
         img = tf.to_float(img)
 
         img = self._mean_image_subtraction(img,self.means,3)
 
         return dmos,img
+
+    def get_test_dataset(self):
+        dataset = tf.data.TFRecordDataset([self.path_to_test_db])
+        dataset = dataset.map(self.decode_tfrecord)
+        dataset = dataset.map(self.preprocessing)
+        dataset = dataset.batch(self.batch_size)
+        return dataset
+
+
+
+    def get_train_dataset(self):
+        dataset = tf.data.TFRecordDataset([self.path_to_train_db])
+        dataset = dataset.map(self.decode_tfrecord)
+        dataset = dataset.map(self.preprocessing)
+        dataset = dataset.batch(self.batch_size).repeat(self.num_epochs)
+        # dataset = dataset.repeat(self.num_epochs)
+
+        return dataset
 
 
 
@@ -172,35 +193,38 @@ class LiveIQADataset(object):
 
 if __name__ == '__main__':
     data = LiveIQADataset('training',batch_size=2,shuffle=False,crop_size=50,num_epochs=10)
-    # feature = data.example()
-    demos,img = data.get()
-    #image_batch = data.get()
-    init_op = tf.group(tf.global_variables_initializer(),tf.local_variables_initializer())
-    with tf.Session() as sess:
-        #sess.as_default()
-        sess.run(init_op)
-        coord = tf.train.Coordinator()
-        threads = tf.train.start_queue_runners(coord=coord)
-        print('Threads:%s' % threads)
-        try:
-            for i in range(1):
-                if not coord.should_stop():
-                    demos_v, img_v = sess.run([demos, img])
-                    print(demos_v)
-                    print(img_v.shape)
-                    # plt.figure()
-                    # plt.imshow(Image.fromarray(img_v,'RGB'))
-                    # plt.show()
-        except tf.errors.OutOfRangeError:
-            print('Catch OutRangeError')
-        finally:
-            coord.request_stop()
-            print('Finish reading')
+    data.test_tfdata()
+    # # feature = data.example()
+    # demos,img = data.get()
+    # #image_batch = data.get()
+    # init_op = tf.group(tf.global_variables_initializer(),tf.local_variables_initializer())
+    # with tf.Session() as sess:
+    #     #sess.as_default()
+    #     sess.run(init_op)
+    #     coord = tf.train.Coordinator()
+    #     threads = tf.train.start_queue_runners(coord=coord)
+    #     print('Threads:%s' % threads)
+    #     try:
+    #         for i in range(1):
+    #             if not coord.should_stop():
+    #                 demos_v, img_v = sess.run([demos, img])
+    #                 print(demos_v)
+    #                 print(img_v.shape)
+    #                 # plt.figure()
+    #                 # plt.imshow(Image.fromarray(img_v,'RGB'))
+    #                 # plt.show()
+    #     except tf.errors.OutOfRangeError:
+    #         print('Catch OutRangeError')
+    #     finally:
+    #         coord.request_stop()
+    #         print('Finish reading')
+    #
+    #
+    #     #feature_v = sess.run([feature])
+    #
+    #     coord.join(threads)
 
 
-        #feature_v = sess.run([feature])
-
-        coord.join(threads)
 
 
 

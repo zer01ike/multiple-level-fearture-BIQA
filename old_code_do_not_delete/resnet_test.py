@@ -1,8 +1,8 @@
 #-*-coding:utf-8-*
 
 import tensorflow as tf
-from DataTools.datatools import generatelist
-from DataTools.datatools import readBatchSizeImage
+from old_code_do_not_delete.DataTools.datatools import generatelist
+from old_code_do_not_delete.DataTools.datatools import readBatchSizeImage
 
 path_to_ckpt = "/home/wangkai/PycharmProjects/multiple-level-fearture-BIQA/save/batch128epochs40/model.ckpt-5"
 
