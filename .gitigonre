@@ -115,14 +115,14 @@ dmypy.json
 .pyre/
 
 # vscode
-/.vscode/*
+.vscode/*
 
 # .idea
-/.idea/*
+.idea/*
 
 # logs
-/logs/*
+logs/*
 
 # save
-/save/*
+save/*
 
