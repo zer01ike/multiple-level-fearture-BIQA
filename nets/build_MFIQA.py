@@ -20,8 +20,8 @@ class MFIQAmodel(object):
             'root_dir': "/home/wangkai/",
             'resnet_ckpt': "/home/wangkai/Paper_MultiFeature_Data/resnet/resnet_v1_50.ckpt",
             'summary_dir': "../logs/batch128epochs40",
-            'save_dir': "../save/tfdatamodel2/",
-            'orginal_learing_rate': 0.001,
+            'save_dir': "../save/tfdatamodel_test/",
+            'orginal_learning_rate': 0.001,
             'decay_steps': 10,
             'decay_rate': 0.1,
             'momentum': 0.9,
@@ -112,46 +112,75 @@ class MFIQAmodel(object):
         :return: None
         '''
 
+        # get the net work from MFIQA class
         self.net = MFIQA_network()
+
+        # get the current_eopch for store the summary
         self.current_epoch = self.net.init()
 
+        # get the predictions from the inference function
         self.ops['predictions'] = self.net.inference(self.data['image'])
+
         # self.ops['loss'] = tf.reduce_sum(tf.square(self.ops['predictions']-self.data['demos']))
         self.ops['loss'] = tf.losses.mean_squared_error(self.ops['predictions'], self.data['demos'])
+
+        # set the writer for summary
         self.train_writer = tf.summary.FileWriter(self.params['summary_dir'], self.sess.graph)
+
+        # add the loss to the summary
         tf.summary.scalar('loss_totoal', self.ops['loss'])
-        self.ops['merged'] = tf.summary.merge_all()
 
     def initial_model(self):
+        '''
+        this is the function to initial model
+        * get the list of resnet 50
+        * set the loader
+        * set the saver
+        * run init_op
+        * restore paramenter of the resnet 50
+        :return: None
+        '''
+
         MFIQA_list = self.net.get_resent50_var()
         loader = tf.train.Saver(var_list=MFIQA_list)
         self.saver = tf.train.Saver()
-        # for i in MFIQA_list:
-        #     print(i)
         init_op = tf.group(tf.global_variables_initializer(), tf.local_variables_initializer())
         self.sess.run(init_op)
         loader.restore(self.sess, self.params['resnet_ckpt'])
 
+        # add the ops with merged
+        self.ops['merged'] = tf.summary.merge_all()
+
     def make_train_step(self):
+        '''
+        define the train step
+        :return: 
+        '''
+
+        # get the variable to train
         trainable_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)
-        # learing_rate = tf.train.exponential_decay(self.params['orginal_learing_rate'],self.current_epoch,decay_steps = self.params['decay_steps'],decay_rate = self.params['decay_rate'])
 
-        # learing_rate = self.params['orginal_learing_rate']
-        learing_rate = tf.Variable(self.params['orginal_learing_rate'], trainable=False, dtype=tf.float32)
-        self.ops['learing_rate_decay'] = learing_rate.assign(tf.multiply(learing_rate, self.params['decay_rate']))
-        self.ops['learning_rate'] = learing_rate
+        # set the learning_rate
+        learning_rate = tf.Variable(self.params['orginal_learning_rate'], trainable=False, dtype=tf.float32)
+
+        # set the learning_rate_decay options
+        self.ops['learning_rate_decay'] = learning_rate.assign(tf.multiply(learning_rate, self.params['decay_rate']))
+        self.ops['learning_rate'] = learning_rate
+
+        # add to the summary
         tf.summary.scalar('learning_rate', self.ops['learning_rate'])
-        momOp = tf.train.MomentumOptimizer(learning_rate=learing_rate, momentum=self.params['momentum'])
+
+        # add encoder block weights to the hsitogram
+        for encoder_var in trainable_vars:
+            if 'encoder' in encoder_var.name:
+                tf.summary.histogram(encoder_var.name, encoder_var)
+
+        # define the optimizer
+        momOp = tf.train.MomentumOptimizer(learning_rate=learning_rate, momentum=self.params['momentum'])
         train_step = momOp.minimize(self.ops['loss'], var_list=trainable_vars, global_step=self.current_epoch)
+
+        # add to ops
         self.ops['train_step'] = train_step
-
-        for var_summary_weight in tf.trainable_variables(scope="encoder"):
-            # print(var_summary_weight)
-            if 'weights' in var_summary_weight.name or 'biases' in var_summary_weight.name:
-                tf.summary.histogram(var_summary_weight.name, var_summary_weight)
-
-    # def variable_summaries(self,var):
-    #     with tf.name_scope('summaries'):
 
     def train_old_style(self):
         with self.graph.as_default():
@@ -204,7 +233,7 @@ class MFIQAmodel(object):
                             total_step += 1
 
                             if total_step % 20 == 0:
-                                print("Eochs = " + str(epochs + 1).ljust(10) + "Step = " + str(total_step).ljust(
+                                print("Train:Eochs = " + str(epochs + 1).ljust(10) + "Step = " + str(total_step).ljust(
                                     10) + "leraning_rate = " + str(learningrate_v).ljust(15) + "Loss = " + str(
                                     loss_v).ljust(15) + "demos = " + str(
                                     np.sum(demos_v[:, 0]) / self.params['batch_size']).ljust(
@@ -213,8 +242,8 @@ class MFIQAmodel(object):
                                 self.train_writer.add_summary(summary_v, total_step)
                         except tf.errors.OutOfRangeError:
                             break
-                if epochs % self.params['decay_steps'] == 0:
-                    self.sess.run(self.ops['learing_rate_decay'])
+                if (epochs + 1) % self.params['decay_steps'] == 0:
+                    self.sess.run(self.ops['learning_rate_decay'])
                 self.saver.save(self.sess, self.params['save_dir'] + 'saved_' + str(epochs) + 'ckpt')
 
                 # test sequence
@@ -248,10 +277,10 @@ class MFIQAmodel(object):
                         sum_d += demos_total[y][x]
                     predictions_average.append(sum_p / 50)
                     demos_average.append(sum_d / 50)
-                    srcc, p_s= spearmanr(predictions_average, demos_average)
-                    plcc, p_p= pearsonr(predictions_average, demos_average)
+                    srcc, p_s = spearmanr(predictions_average, demos_average)
+                    plcc, p_p = pearsonr(predictions_average, demos_average)
 
-                print("Test:Eochs = " + str(epochs + 1).ljust(10) +
+                print("Test :Eochs = " + str(epochs + 1).ljust(10) +
                       "P_s =" + str(p_s).ljust(25) +
                       "SRCC = " + str(srcc).ljust(25) +
                       "P_P =" + str(p_p).ljust(25) +

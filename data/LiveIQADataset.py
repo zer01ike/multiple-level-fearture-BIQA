@@ -6,8 +6,9 @@ from PIL import Image
 import numpy as np
 import matplotlib.pyplot as plt
 
+
 class LiveIQADataset(object):
-    def __init__(self, mode, batch_size=1, shuffle=True, crop_size=50,num_epochs=10,crop_shape=[224,224,3]):
+    def __init__(self, mode, batch_size=1, shuffle=True, crop_size=50, num_epochs=10, crop_shape=[224, 224, 3]):
         # # check read mode
         # if mode == 'training':
         #     self.path_to_db = '/home/wangkai/Paper_MultiFeature_Data/databaserelease2/train.tfrecord'
@@ -29,22 +30,22 @@ class LiveIQADataset(object):
         self.crop_size = crop_size
         self.crop_shape = crop_shape
         self.num_epochs = num_epochs
-        self.means = [103.94,116.78,123.68]
+        self.means = [103.94, 116.78, 123.68]
 
     def example(self):
         dataset = tf.data.TFRecordDataset([self.path_to_db])
         reader = tf.TFRecordReader()
-        _,value = reader.read(tf.train.string_input_producer([self.path_to_db], num_epochs=self.num_epochs,
-                                                  shuffle=self.shuffle))
-        #_, value = reader.read(tf.train.string_input_producer([self.path_to_db]))
+        _, value = reader.read(tf.train.string_input_producer([self.path_to_db], num_epochs=self.num_epochs,
+                                                              shuffle=self.shuffle))
+        # _, value = reader.read(tf.train.string_input_producer([self.path_to_db]))
         features = self.decode_tfrecord(value=value)
-        #return features
+        # return features
         dmos, img = self.preprocessing(features)
 
         #
-        return dmos,img
+        return dmos, img
 
-    def preprocessing(self,features):
+    def preprocessing(self, features):
         dmos = tf.cast(features['dmos'], tf.float32)
         dmos = tf.reshape(dmos, [1])
         hight = tf.cast(features['height'], tf.int64)
@@ -54,12 +55,12 @@ class LiveIQADataset(object):
         img = tf.reshape(img, [hight, width, channel])
 
         # pass
-        img = tf.random_crop(img,self.crop_shape)
+        img = tf.random_crop(img, self.crop_shape)
         img = tf.to_float(img)
 
-        img = self._mean_image_subtraction(img,self.means,3)
+        img = self._mean_image_subtraction(img, self.means, 3)
 
-        return dmos,img
+        return dmos, img
 
     def get_test_dataset(self):
         dataset = tf.data.TFRecordDataset([self.path_to_test_db])
@@ -67,8 +68,6 @@ class LiveIQADataset(object):
         dataset = dataset.map(self.preprocessing)
         dataset = dataset.batch(self.batch_size)
         return dataset
-
-
 
     def get_train_dataset(self):
         dataset = tf.data.TFRecordDataset([self.path_to_train_db])
@@ -79,31 +78,25 @@ class LiveIQADataset(object):
 
         return dataset
 
-
-
     def get(self):
         # my_example = self.example()
-        #TODO:
-        demos,img = self.example()
+        # TODO:
+        demos, img = self.example()
 
         min_after_dequeue = 10000
         capacity = min_after_dequeue + 3 * self.batch_size
         demos, img = tf.train.shuffle_batch(
-            [demos,img],batch_size=self.batch_size,capacity=capacity,
+            [demos, img], batch_size=self.batch_size, capacity=capacity,
             min_after_dequeue=min_after_dequeue
         )
-        return demos,img
+        return demos, img
 
+    def _mean_image_subtraction(self, image, means, channel):
 
-
-    def _mean_image_subtraction(self,image,means,channel):
-
-        image_channels = tf.split(axis=2,num_or_size_splits=channel,value=image)
+        image_channels = tf.split(axis=2, num_or_size_splits=channel, value=image)
         for i in range(channel):
-            image_channels[i] -=means[i]
-        return tf.concat(axis=2,values=image_channels)
-
-
+            image_channels[i] -= means[i]
+        return tf.concat(axis=2, values=image_channels)
 
     def _prase_file(self):
         self.imagesinfo = []
@@ -120,12 +113,13 @@ class LiveIQADataset(object):
                 single_name = single_imagepath.split("/")[1].split('.')[0]
                 single_dmos_normalize = eachline.split(" ")[4]
 
-                single_image = [parentdir+single_imagepath,single_ref,single_distoration, single_name,single_dmos_normalize]
+                single_image = [parentdir + single_imagepath, single_ref, single_distoration, single_name,
+                                single_dmos_normalize]
                 self.imagesinfo.append(single_image)
 
-    def generateTrainTestDataSet(self,percentage=[8,2]):
+    def generateTrainTestDataSet(self, percentage=[8, 2]):
         self._prase_file()
-        if sum(percentage) != 10 :assert 0,'error percentage for generate Train and test'
+        if sum(percentage) != 10: assert 0, 'error percentage for generate Train and test'
 
         train_name_list = []
         test_name_list = []
@@ -139,15 +133,14 @@ class LiveIQADataset(object):
 
         for image in self.imagesinfo:
             if image[1] in test_ref_list:
-                test_name_list.append([image[0],image[4]])
+                test_name_list.append([image[0], image[4]])
             else:
-                train_name_list.append([image[0],image[4]])
+                train_name_list.append([image[0], image[4]])
 
-        self.save(mode='tfRecord',name=self.iqa_dir+'train.tfrecord',nameList=train_name_list)
-        self.save(mode='tfRecord',name=self.iqa_dir+'test.tfrecord',nameList=test_name_list)
+        self.save(mode='tfRecord', name=self.iqa_dir + 'train.tfrecord', nameList=train_name_list)
+        self.save(mode='tfRecord', name=self.iqa_dir + 'test.tfrecord', nameList=test_name_list)
 
-
-    def save(self,mode='tfRecord',name=None,nameList=[]):
+    def save(self, mode='tfRecord', name=None, nameList=[]):
         def _bytes_feature(value):
             """Returns a bytes_list from a string / byte."""
             return tf.train.Feature(bytes_list=tf.train.BytesList(value=[value]))
@@ -159,9 +152,10 @@ class LiveIQADataset(object):
         def _int64_feature(value):
             """Returns an int64_list from a bool / enum / int / uint."""
             return tf.train.Feature(int64_list=tf.train.Int64List(value=[value]))
+
         writer = tf.python_io.TFRecordWriter(name)
         count = 0
-        for im_dir,demos in nameList:
+        for im_dir, demos in nameList:
             image = Image.open(im_dir)
             width, height = image.size
             count += 1
@@ -180,7 +174,8 @@ class LiveIQADataset(object):
             writer.write(tf_example.SerializeToString())
             print("write:".ljust(10) + str(count) + "Down!".rjust(4))
         writer.close()
-    def decode_tfrecord(self,value):
+
+    def decode_tfrecord(self, value):
         features = tf.parse_single_example(value,
                                            features={
                                                'height': tf.FixedLenFeature([], tf.int64),
@@ -191,8 +186,9 @@ class LiveIQADataset(object):
                                            })
         return features
 
+
 if __name__ == '__main__':
-    data = LiveIQADataset('training',batch_size=2,shuffle=False,crop_size=50,num_epochs=10)
+    data = LiveIQADataset('training', batch_size=2, shuffle=False, crop_size=50, num_epochs=10)
     data.test_tfdata()
     # # feature = data.example()
     # demos,img = data.get()
@@ -223,11 +219,3 @@ if __name__ == '__main__':
     #     #feature_v = sess.run([feature])
     #
     #     coord.join(threads)
-
-
-
-
-
-
-
-
