@@ -1,26 +1,26 @@
-from __future__ import print_function, unicode_literals
+# _*_ coding:utf-8 _*_
+# @Time     :12/21/18 5:42 PM
+# @Author   :zer01ike
+# @FileName : build_PPMIQA.py
+# @gitHub   : https://github.com/zer01ike
+
+from __future__ import print_function,unicode_literals
 
 import tensorflow as tf
-from nets.MFIQA_network import MFIQA_network
-from data.LiveIQADataset import LiveIQADataset
 import numpy as np
+from data.LiveIQADataset import LiveIQADataset
+from nets.PPMIQA_network import PPMIQA
 from scipy.stats import spearmanr
 from scipy.stats import pearsonr
 
-
-class MFIQAmodel(object):
+class PPMIQAmodel(object):
     @classmethod
     def default_params(cls):
-        '''
-        this is the default_params to the params for the this model
-        please set the your own params to replace the following dict
-        :return: a dict with params
-        '''
         return {
             'root_dir': "/home/wangkai/",
             'resnet_ckpt': "/home/wangkai/Paper_MultiFeature_Data/resnet/resnet_v1_50.ckpt",
-            'summary_dir': "../logs/batch128epochs40",
-            'save_dir': "../save/tfdatamodel_test/",
+            'summary_dir': "../logs/multib1b4",
+            'save_dir': "../save/multib1b4/",
             'orginal_learning_rate': 0.001,
             'decay_steps': 10,
             'decay_rate': 0.1,
@@ -30,50 +30,28 @@ class MFIQAmodel(object):
             'batch_size': 32,
             'height': 224,
             'width': 224,
-            'channels': 3
-
-        }
+            'channels': 3}
 
     def __init__(self):
-        # get the params to use
+
         self.params = self.default_params()
 
-        # set the grpah
         self.graph = tf.Graph()
 
-        # set the gpu options
         gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.8)
 
-        # set the sess
-        self.sess = tf.Session(graph=self.graph, config=tf.ConfigProto(gpu_options=gpu_options))
+        self.sess = tf.Session(graph=self.graph,config=tf.ConfigProto(gpu_options=gpu_options))
 
-        # define the network
         with self.graph.as_default():
-            # define the placeholder
-            self.placeholders = {}
-
-            # get the content of the placeholder
-            # self.build_placeholders()
-
-            # define the operations dict
             self.ops = {}
-
-            # define the data dict
             self.data = {}
             self.get_DataSet()
 
-            # build the network
-            self.build_MFIQA_net()
+            self.build_PPMIQA_net()
 
-            # build the train options
             self.make_train_step()
 
-            # paramater initilizer or restore model
             self.initial_model()
-
-    # def build_placeholders(self):
-    #     self.placeholders['X'] = tf.placeholder(tf.float32, shape=[self.params['batch_size'], self.params['height'], self.params['width'], self.params['channels']], name='x_input')
-    #     self.placeholders['Y'] = tf.placeholder(tf.float32, (self.params['batch_size'], 1))
 
     def get_DataSet(self):
         '''
@@ -105,59 +83,26 @@ class MFIQAmodel(object):
         # get the demo and image from the dataset
         self.data['demos'], self.data['image'] = iter.get_next()
 
-    def build_MFIQA_net(self):
-        '''
-        this is the function to build net of MFIQA
-        contain the net structure and the summary witer
-        :return: None
-        '''
+    def build_PPMIQA_net(self):
+        self.net = PPMIQA()
 
-        # get the net work from MFIQA class
-        self.net = MFIQA_network()
+        self.current_epoch = tf.Variable(0, name="current_epoch")
 
-        # get the current_eopch for store the summary
-        self.current_epoch = self.net.init()
-
-        # get the predictions from the inference function
         self.ops['predictions'] = self.net.inference(self.data['image'])
 
-        # self.ops['loss'] = tf.reduce_sum(tf.square(self.ops['predictions']-self.data['demos']))
-        self.ops['loss'] = tf.losses.mean_squared_error(self.ops['predictions'], self.data['demos'])
-
-        # set the writer for summary
-        self.train_writer = tf.summary.FileWriter(self.params['summary_dir'], self.sess.graph)
-
-        # add the loss to the summary
-        tf.summary.scalar('loss_totoal', self.ops['loss'])
+        self.ops['loss'] = tf.losses.mean_squared_error(self.ops['predictions'],self.data['demos'])
 
     def initial_model(self):
-        '''
-        this is the function to initial model
-        * get the list of resnet 50
-        * set the loader
-        * set the saver
-        * run init_op
-        * restore paramenter of the resnet 50
-        :return: None
-        '''
 
-        MFIQA_list = self.net.get_resent50_var()
-        loader = tf.train.Saver(var_list=MFIQA_list)
-        self.saver = tf.train.Saver()
-        init_op = tf.group(tf.global_variables_initializer(), tf.local_variables_initializer())
+        PPMIQA_list = self.net.get_resent50_var()
+        loader = tf.train.Saver(var_list=PPMIQA_list)
+        init_op = tf.group(tf.global_variables_initializer(),tf.local_variables_initializer())
         self.sess.run(init_op)
-        loader.restore(self.sess, self.params['resnet_ckpt'])
 
-        # add the ops with merged
-        self.ops['merged'] = tf.summary.merge_all()
+        loader.restore(self.sess,self.params['resnet_ckpt'])
+
 
     def make_train_step(self):
-        '''
-        define the train step
-        :return: 
-        '''
-
-        # get the variable to train
         trainable_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)
 
         # set the learning_rate
@@ -167,56 +112,12 @@ class MFIQAmodel(object):
         self.ops['learning_rate_decay'] = learning_rate.assign(tf.multiply(learning_rate, self.params['decay_rate']))
         self.ops['learning_rate'] = learning_rate
 
-        # add to the summary
-        tf.summary.scalar('learning_rate', self.ops['learning_rate'])
-
-        # add encoder block weights to the hsitogram
-        for encoder_var in trainable_vars:
-            if 'encoder' in encoder_var.name:
-                tf.summary.histogram(encoder_var.name, encoder_var)
-
         # define the optimizer
         momOp = tf.train.MomentumOptimizer(learning_rate=learning_rate, momentum=self.params['momentum'])
         train_step = momOp.minimize(self.ops['loss'], var_list=trainable_vars, global_step=self.current_epoch)
 
         # add to ops
         self.ops['train_step'] = train_step
-
-    def train_old_style(self):
-        with self.graph.as_default():
-            coord = tf.train.Coordinator()
-            threads = tf.train.start_queue_runners(sess=self.sess, coord=coord)
-            try:
-                total_step = 0
-                # random crop size
-                for i in range(1000000):
-                    total_step += 1
-                    if not coord.should_stop():
-                        #         image_v,demos_v = self.sess.run([self.data['image'], self.data['demos']])
-                        #         _,loss_v,predicitons_v,summary_v = self.sess.run([self.ops['train_step'],
-                        # self.ops['loss'],self.ops['predictions'],self.ops['merged']],feed_dict={self.placeholders['X']:image_v,self.placeholders['Y'] : demos_v})
-                        _, loss_v, predicitons_v, summary_v = self.sess.run(
-                            [self.ops['train_step'], self.ops['loss'], self.ops['predictions'], self.ops['merged']])
-                        # print(demos_v)
-                        # print(img_v.shape)
-                        # plt.figure()
-                        # plt.imshow(Image.fromarray(img_v,'RGB'))
-                        # plt.show()
-                    if i % 20 == 0:
-                        print("Step = " + str(total_step).ljust(15) +
-                              "Loss = " + str(loss_v).ljust(15) +
-                              "mean_prediction = " + str(predicitons_v[0][0]).ljust(20))
-                        self.train_writer.add_summary(summary_v, total_step)
-
-            except tf.errors.OutOfRangeError:
-                print('Catch OutRangeError')
-            finally:
-                coord.request_stop()
-                print('Finish reading')
-
-            coord.join(threads)
-            # for i in range(self.params['corp_size']):
-            #     _,loss_v,predicitons_v =self.sess.run()
 
     def train(self):
         total_step = 0
@@ -225,12 +126,12 @@ class MFIQAmodel(object):
                 self.current_epoch = epochs + 1
                 for corp_time in range(5):
                     self.sess.run(self.ops['train_init_op'])
-                    print(self.sess.run([self.data['image']]))
+                    #print(self.sess.run([self.data['image']]))
 
                     while True:
                         try:
-                            _, loss_v, predicitons_v, summary_v, demos_v, learningrate_v = self.sess.run(
-                                [self.ops['train_step'], self.ops['loss'], self.ops['predictions'], self.ops['merged'],
+                            _, loss_v, predicitons_v, demos_v, learningrate_v = self.sess.run(
+                                [self.ops['train_step'], self.ops['loss'], self.ops['predictions'],
                                  self.data['demos'], self.ops['learning_rate']])
                             total_step += 1
 
@@ -241,12 +142,12 @@ class MFIQAmodel(object):
                                     np.sum(demos_v[:, 0]) / self.params['batch_size']).ljust(
                                     25) + "mean_prediction = " + str(
                                     np.sum(predicitons_v[:, 0]) / self.params['batch_size']).ljust(25))
-                                self.train_writer.add_summary(summary_v, total_step)
+                                #self.train_writer.add_summary(summary_v, total_step)
                         except tf.errors.OutOfRangeError:
                             break
                 if (epochs + 1) % self.params['decay_steps'] == 0:
                     self.sess.run(self.ops['learning_rate_decay'])
-                self.saver.save(self.sess, self.params['save_dir'] + 'saved_' + str(epochs) + 'ckpt')
+                #self.saver.save(self.sess, self.params['save_dir'] + 'saved_' + str(epochs) + 'ckpt')
 
                 # test sequence
                 predictions_total = []
@@ -288,12 +189,5 @@ class MFIQAmodel(object):
                       "P_P =" + str(p_p).ljust(25) +
                       "PLCC = " + str(plcc).ljust(25))
 
-    def test(self):
-        # reload model
-        # run accuracy
-        # print srocc plcc
-        pass
-
-
-model = MFIQAmodel()
+model = PPMIQAmodel()
 model.train()

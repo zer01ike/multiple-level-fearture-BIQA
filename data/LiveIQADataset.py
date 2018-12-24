@@ -189,7 +189,13 @@ class LiveIQADataset(object):
 
 if __name__ == '__main__':
     data = LiveIQADataset('training', batch_size=2, shuffle=False, crop_size=50, num_epochs=10)
-    data.test_tfdata()
+    data = data.get_train_dataset()
+
+    iter = tf.data.Dataset.make_one_shot_iterator(data)
+    next_elemnt = iter.get_next()
+
+    with tf.Session() as sess:
+        print(sess.run(next_elemnt))
     # # feature = data.example()
     # demos,img = data.get()
     # #image_batch = data.get()
