@@ -90,16 +90,28 @@ class PPMIQAmodel(object):
 
         self.ops['predictions'] = self.net.inference(self.data['image'])
 
-        self.ops['loss'] = tf.losses.mean_squared_error(self.ops['predictions'],self.data['demos'])
+        #self.ops['loss'] = tf.losses.mean_squared_error(self.ops['predictions'],self.data['demos'])
+        self.ops['loss'] = tf.reduce_sum(tf.square(self.ops['predictions']-self.data['demos']))
+
+
+        # set the writer for summary
+        self.train_writer = tf.summary.FileWriter(self.params['summary_dir'], self.sess.graph)
+
+        # add the loss to the summary
+        tf.summary.scalar('loss_totoal', self.ops['loss'])
 
     def initial_model(self):
 
         PPMIQA_list = self.net.get_resent50_var()
         loader = tf.train.Saver(var_list=PPMIQA_list)
+        self.saver = tf.train.Saver()
         init_op = tf.group(tf.global_variables_initializer(),tf.local_variables_initializer())
         self.sess.run(init_op)
 
         loader.restore(self.sess,self.params['resnet_ckpt'])
+
+        # add the ops with merged
+        self.ops['merged'] = tf.summary.merge_all()
 
 
     def make_train_step(self):
@@ -111,6 +123,14 @@ class PPMIQAmodel(object):
         # set the learning_rate_decay options
         self.ops['learning_rate_decay'] = learning_rate.assign(tf.multiply(learning_rate, self.params['decay_rate']))
         self.ops['learning_rate'] = learning_rate
+
+        # add to the summary
+        tf.summary.scalar('learning_rate', self.ops['learning_rate'])
+
+        # add encoder block weights to the hsitogram
+        for multiple_var in trainable_vars:
+            if 'multiple_concat' in multiple_var.name:
+                tf.summary.histogram(multiple_var.name, multiple_var)
 
         # define the optimizer
         momOp = tf.train.MomentumOptimizer(learning_rate=learning_rate, momentum=self.params['momentum'])
@@ -130,8 +150,8 @@ class PPMIQAmodel(object):
 
                     while True:
                         try:
-                            _, loss_v, predicitons_v, demos_v, learningrate_v = self.sess.run(
-                                [self.ops['train_step'], self.ops['loss'], self.ops['predictions'],
+                            _, loss_v, predicitons_v, summary_v, demos_v, learningrate_v = self.sess.run(
+                                [self.ops['train_step'], self.ops['loss'], self.ops['predictions'],self.ops['merged'],
                                  self.data['demos'], self.ops['learning_rate']])
                             total_step += 1
 
@@ -142,12 +162,12 @@ class PPMIQAmodel(object):
                                     np.sum(demos_v[:, 0]) / self.params['batch_size']).ljust(
                                     25) + "mean_prediction = " + str(
                                     np.sum(predicitons_v[:, 0]) / self.params['batch_size']).ljust(25))
-                                #self.train_writer.add_summary(summary_v, total_step)
+                                self.train_writer.add_summary(summary_v, total_step)
                         except tf.errors.OutOfRangeError:
                             break
                 if (epochs + 1) % self.params['decay_steps'] == 0:
                     self.sess.run(self.ops['learning_rate_decay'])
-                #self.saver.save(self.sess, self.params['save_dir'] + 'saved_' + str(epochs) + 'ckpt')
+                self.saver.save(self.sess, self.params['save_dir'] + 'saved_' + str(epochs) + 'ckpt')
 
                 # test sequence
                 predictions_total = []

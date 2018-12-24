@@ -37,10 +37,10 @@ class PPMIQA(object):
     
     def spatial_pooling(self):
         with tf.variable_scope("multiple_concat"):
-            block1_feature = tf.get_default_graph().get_tensor_by_name(self.features_tensor_name['feature_block_1'])
-            block4_feature = tf.get_default_graph().get_tensor_by_name(self.features_tensor_name['feature_block_4'])
+            block1_feature = tf.get_default_graph().get_tensor_by_name(self.features_tensor_name['feature_block_1']) # 28 * 28 * 256
+            block4_feature = tf.get_default_graph().get_tensor_by_name(self.features_tensor_name['feature_block_4']) # 7 * 7 * 2048
 
-            # 1*1*256 for every feature map
+            #1*1*256 for every feature map
             block1_feature = layers_lib.conv2d(block1_feature, 256, [1, 1], stride=1, padding='SAME', scope="conv1",
                               activation_fn=tf.nn.relu, normalizer_fn=layers.batch_norm,
                               trainable=True)
@@ -49,11 +49,11 @@ class PPMIQA(object):
                                                activation_fn=tf.nn.relu, normalizer_fn=layers.batch_norm,
                                                trainable=True)
 
-            block1_feature_down = layers_lib.conv2d(block1_feature,256,[4, 4],stride=4,padding='VALID',scope='downsample',
+            block1_feature_down = layers_lib.conv2d(block1_feature, 256, [4, 4],stride=4,padding='VALID',scope='downsample', # 7 * 7 * 2048
                                                     activation_fn=tf.nn.relu,normalizer_fn=layers.batch_norm,
                                                     trainable=True)
-            block4_feature_up = layers_lib.conv2d_transpose(block4_feature,256,[4, 4],stride=4,padding='VALID',scope='upsample',
-                                                            activation_fn=tf.nn.relu,normalizer_fn=layers.batch_norm,
+            block4_feature_up = layers_lib.conv2d_transpose(block4_feature, 256, [4, 4], stride=4, padding='VALID',scope='upsample', # 28 * 28 * 256
+                                                            activation_fn=tf.nn.relu, normalizer_fn=layers.batch_norm,
                                                             trainable=True)
 
             # block1 concate with the block4_up
@@ -64,14 +64,15 @@ class PPMIQA(object):
 
             #Gap for every concat result
 
-            gap_up = math_ops.reduce_mean(concat_upsample, [1, 2], name='gap_up', keepdims=False)
-            gap_down = math_ops.reduce_mean(concat_downsample,[1,2],name='gap_down',keep_dims=False)
+            gap_up = math_ops.reduce_mean(concat_upsample,[1, 2], name='gap_up', keepdims=False)
+            gap_down = math_ops.reduce_mean(concat_downsample, [1, 2], name='gap_down',keepdims=False)
 
             # concat the two features
             concat = tf.concat([gap_up,gap_down],-1,name='concat_all')
 
             # full connected
-            fc = layers_lib.fully_connected(concat, 1, activation_fn=tf.nn.relu, scope="multi_FC")
+            fc = layers_lib.fully_connected(concat, 1, activation_fn=tf.nn.sigmoid, scope="multi_FC")
+
         return fc
 
     def get_resent50_var(self):
