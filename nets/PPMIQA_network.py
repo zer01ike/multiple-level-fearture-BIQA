@@ -49,10 +49,10 @@ class PPMIQA(object):
                                                activation_fn=tf.nn.relu, normalizer_fn=layers.batch_norm,
                                                trainable=True)
 
-            block1_feature_down = layers_lib.conv2d(block1_feature, 256, [4, 4],stride=4,padding='VALID',scope='downsample', # 7 * 7 * 2048
-                                                    activation_fn=tf.nn.relu,normalizer_fn=layers.batch_norm,
-                                                    trainable=True)
-            block4_feature_up = layers_lib.conv2d_transpose(block4_feature, 256, [4, 4], stride=4, padding='VALID',scope='upsample', # 28 * 28 * 256
+            # block1_feature_down = layers_lib.conv2d(block1_feature, 256, [4, 4],stride=4,padding='VALID',scope='downsample', # 7 * 7 * 2048
+            #                                         activation_fn=tf.nn.relu,normalizer_fn=layers.batch_norm,
+            #                                         trainable=True)
+            block4_feature_up = layers_lib.conv2d_transpose(block4_feature, 256, [4, 4], stride=4, padding='VALID', scope='upsample', # 28 * 28 * 256
                                                             activation_fn=tf.nn.relu, normalizer_fn=layers.batch_norm,
                                                             trainable=True)
 
@@ -60,17 +60,21 @@ class PPMIQA(object):
             concat_upsample = tf.concat([block1_feature, block4_feature_up], -1, name='concat_upsample')
 
             # block4 concate with the block1_down
-            concat_downsample = tf.concat([block4_feature,block1_feature_down],-1,name='concat_downsample')
+            # concat_downsample = tf.concat([block4_feature,block1_feature_down],-1,name='concat_downsample')
 
             #Gap for every concat result
 
             gap_up = math_ops.reduce_mean(concat_upsample,[1, 2], name='gap_up', keepdims=False)
-            gap_down = math_ops.reduce_mean(concat_downsample, [1, 2], name='gap_down',keepdims=False)
+            #gap_down = math_ops.reduce_mean(concat_downsample, [1, 2], name='gap_down',keepdims=False)
+            gap_block4 = math_ops.reduce_mean(block4_feature, [1, 2], name='gap_down', keepdims=False)
+
 
             # concat the two features
-            concat = tf.concat([gap_up,gap_down],-1,name='concat_all')
+            # concat = tf.concat([gap_up,gap_down],-1,name='concat_all')
+            concat = tf.concat([gap_up, gap_block4],-1,name='concat_all')
 
             # full connected
+            # fc = layers_lib.fully_connected(concat_upsample, 1, activation_fn=tf.nn.sigmoid, scope="multi_FC")
             fc = layers_lib.fully_connected(concat, 1, activation_fn=tf.nn.sigmoid, scope="multi_FC")
 
         return fc

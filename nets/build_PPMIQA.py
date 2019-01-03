@@ -5,10 +5,15 @@
 # @gitHub   : https://github.com/zer01ike
 
 from __future__ import print_function,unicode_literals
+from typing import List,Any,Sequence
 
 import tensorflow as tf
 import numpy as np
+import os
 from data.LiveIQADataset import LiveIQADataset
+from data.LiveCHIQADataset import LiveCHIQADataset
+from data.TID2013Dataset import TID2013Dataset
+from data.SynIQADataset import SynIQADataset
 from nets.PPMIQA_network import PPMIQA
 from scipy.stats import spearmanr
 from scipy.stats import pearsonr
@@ -19,15 +24,19 @@ class PPMIQAmodel(object):
         return {
             'root_dir': "/home/wangkai/",
             'resnet_ckpt': "/home/wangkai/Paper_MultiFeature_Data/resnet/resnet_v1_50.ckpt",
-            'summary_dir': "../logs/multib1b4",
-            'save_dir': "../save/multib1b4/",
+            'output_log': "../multib1b4_syn_data.txt",
+            'summary_dir': "../logs/multib1b4_syn_data",
+            'save_dir': "../save/multib1b4_syn_data/",
+            'train': False,
+            'restore_file': '../save/multib1b4_syn_data/',
+            'restore_name': 'saved_15ckpt',
             'orginal_learning_rate': 0.001,
             'decay_steps': 10,
             'decay_rate': 0.1,
             'momentum': 0.9,
             'epochs': 100,
             'corp_size': 10,
-            'batch_size': 32,
+            'batch_size': 1,
             'height': 224,
             'width': 224,
             'channels': 3}
@@ -51,8 +60,10 @@ class PPMIQAmodel(object):
 
             self.make_train_step()
 
-            self.initial_model()
-
+            if self.params['train'] is True:
+                self.initial_model()
+            else:
+                self.restore_model(self.params['save_dir'])
     def get_DataSet(self):
         '''
         this is the function to get the Dataset
@@ -60,7 +71,18 @@ class PPMIQAmodel(object):
         '''
 
         # get the dataset from the LiveIQA Dataset
-        dataset = LiveIQADataset(mode='training', batch_size=self.params['batch_size'], shuffle=True, crop_size=50,
+        # dataset = LiveIQADataset(mode='training', batch_size=self.params['batch_size'], shuffle=True, crop_size=50,
+        #                          num_epochs=self.params['corp_size'],
+        #                          crop_shape=[self.params['height'], self.params['width'], self.params['channels']])
+
+        # dataset = LiveCHIQADataset(batch_size=self.params['batch_size'], shuffle=True, crop_size=50,
+        #                          num_epochs=self.params['corp_size'],
+        #                          crop_shape=[self.params['height'], self.params['width'], self.params['channels']])
+
+        # dataset = TID2013Dataset(batch_size=self.params['batch_size'], shuffle=True, crop_size=50,
+        #                            num_epochs=self.params['corp_size'],
+        #                            crop_shape=[self.params['height'], self.params['width'], self.params['channels']])
+        dataset = SynIQADataset(batch_size=self.params['batch_size'], shuffle=True, crop_size=50,
                                  num_epochs=self.params['corp_size'],
                                  crop_shape=[self.params['height'], self.params['width'], self.params['channels']])
 
@@ -113,6 +135,14 @@ class PPMIQAmodel(object):
         # add the ops with merged
         self.ops['merged'] = tf.summary.merge_all()
 
+    def restore_model(self, path: str) -> None:
+        print("Restoring weights from file %s." % path)
+        loader = tf.train.Saver()
+        full_path = os.path.join(path,self.params['restore_name'])
+        loader.restore(self.sess, path)
+
+        self.ops['merged'] = tf.summary.merge_all()
+
 
     def make_train_step(self):
         trainable_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)
@@ -141,12 +171,13 @@ class PPMIQAmodel(object):
 
     def train(self):
         total_step = 0
+        outputfile = open(self.params['output_log'],'w')
         with self.graph.as_default():
             for epochs in range(self.params['epochs']):
                 self.current_epoch = epochs + 1
                 for corp_time in range(5):
                     self.sess.run(self.ops['train_init_op'])
-                    #print(self.sess.run([self.data['image']]))
+                    # print(self.sess.run([self.data['image']]))
 
                     while True:
                         try:
@@ -162,6 +193,12 @@ class PPMIQAmodel(object):
                                     np.sum(demos_v[:, 0]) / self.params['batch_size']).ljust(
                                     25) + "mean_prediction = " + str(
                                     np.sum(predicitons_v[:, 0]) / self.params['batch_size']).ljust(25))
+                                outputfile.write("Train:Eochs = " + str(epochs + 1).ljust(10) + "Step = " + str(total_step).ljust(
+                                    10) + "leraning_rate = " + str(learningrate_v).ljust(15) + "Loss = " + str(
+                                    loss_v).ljust(15) + "demos = " + str(
+                                    np.sum(demos_v[:, 0]) / self.params['batch_size']).ljust(
+                                    25) + "mean_prediction = " + str(
+                                    np.sum(predicitons_v[:, 0]) / self.params['batch_size']).ljust(25))
                                 self.train_writer.add_summary(summary_v, total_step)
                         except tf.errors.OutOfRangeError:
                             break
@@ -172,25 +209,34 @@ class PPMIQAmodel(object):
                 # test sequence
                 predictions_total = []
                 demos_total = []
+                loss_total = []
                 for crop_time in range(50):
                     self.sess.run(self.ops['test_init_op'])
                     predictions_each_epochs = []
                     demos_each_epochs = []
+                    loss_each_epochs =[]
                     while True:
                         try:
-                            predictions_v, demos_v = self.sess.run([self.ops['predictions'], self.data['demos']])
-                            # print(predictions_v.shape,demos_v.shape)
+                            predictions_v, demos_v, loss_v = self.sess.run([self.ops['predictions'],
+                                                                            self.data['demos'],
+                                                                            self.ops['loss']])
+                            print("Testing loss: ", loss_v)
+                            print(predictions_v.shape, demos_v.shape)
                             for i in range(predictions_v.shape[0]):
                                 predictions_each_epochs.append(predictions_v[i][0])
                                 demos_each_epochs.append(demos_v[i][0])
+                            loss_each_epochs.append(loss_v)
+
                         except tf.errors.OutOfRangeError:
                             break
                     # get one epochs predictions and demos
                     predictions_total.append(predictions_each_epochs)
                     demos_total.append(demos_each_epochs)
+                    loss_total.append(loss_each_epochs)
 
                 predictions_average = []
                 demos_average = []
+                loss_average = []
 
                 for x in range(len(predictions_total[0])):
                     sum_p = 0
@@ -203,11 +249,27 @@ class PPMIQAmodel(object):
                     srcc, p_s = spearmanr(predictions_average, demos_average)
                     plcc, p_p = pearsonr(predictions_average, demos_average)
 
+
+                for m in range(len(loss_total[0])):
+                    sum_l = 0
+                    for n in range(len(loss_total)):
+                        sum_l += loss_total[n][m]
+                    loss_average.append(sum_l/50)
+
                 print("Test :Eochs = " + str(epochs + 1).ljust(10) +
                       "P_s =" + str(p_s).ljust(25) +
                       "SRCC = " + str(srcc).ljust(25) +
                       "P_P =" + str(p_p).ljust(25) +
+                      "PLCC = " + str(plcc).ljust(25) +
+                      "mean_loss = " + str(sum_l/50).ljust(25))
+                outputfile.write("Test :Eochs = " + str(epochs + 1).ljust(10) +
+                      "P_s =" + str(p_s).ljust(25) +
+                      "SRCC = " + str(srcc).ljust(25) +
+                      "P_P =" + str(p_p).ljust(25) +
                       "PLCC = " + str(plcc).ljust(25))
+        outputfile.close()
+
+
 
 model = PPMIQAmodel()
 model.train()
