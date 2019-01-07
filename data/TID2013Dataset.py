@@ -16,6 +16,7 @@ class TID2013Dataset(object):
         self.path_to_images = '/home/wangkai/Paper_MultiFeature_Data/tid2013/distorted_images/'
         self.path_to_train_db = '/home/wangkai/Paper_MultiFeature_Data/tid2013/train_normalized.tfrecord'
         self.path_to_test_db = '/home/wangkai/Paper_MultiFeature_Data/tid2013/test_normalized.tfrecord'
+        self.path_to_single_db = '/home/wangkai/Paper_MultiFeature_Data/tid2013/single_normalized.tfrecord'
 
         self.batch_size = batch_size
         self.shuffle = shuffle
@@ -77,6 +78,76 @@ class TID2013Dataset(object):
             print("write:".ljust(10) + str(count) + "Down!".rjust(4))
         writer.close()
 
+    def save_single(self,name, Images, demos, type):
+        def _bytes_feature(value):
+            """Returns a bytes_list from a string / byte."""
+            return tf.train.Feature(bytes_list=tf.train.BytesList(value=[value]))
+
+        def _float_feature(value):
+            """Returns a float_list from a float / double."""
+            return tf.train.Feature(float_list=tf.train.FloatList(value=[value]))
+
+        def _int64_feature(value):
+            """Returns an int64_list from a bool / enum / int / uint."""
+            return tf.train.Feature(int64_list=tf.train.Int64List(value=[value]))
+
+        writer = tf.python_io.TFRecordWriter(name)
+        count = 0
+        print("Writing TFrecord to File %s."%self.path_to_single_db)
+        for image in Images:
+            width, height = image.size
+            image = image.convert('RGB')
+            count += 1
+            image = np.array(image)
+            image_raw = Image.fromarray(image).tobytes()
+
+            feature = {
+                'height': _int64_feature(height),
+                'width': _int64_feature(width),
+                'channel': _int64_feature(3),
+                'dmos': _float_feature(float(demos) / 10),
+                'type':_int64_feature(int(type)),
+                'image_raw': _bytes_feature(image_raw)
+            }
+
+            tf_example = tf.train.Example(features=tf.train.Features(feature=feature))
+            writer.write(tf_example.SerializeToString())
+            #print("write:".ljust(10) + str(count) + "Down!".rjust(4))
+        writer.close()
+
+    def get_test_list(self):
+        imageList = self._prase_file()
+        imagetype = [i for i in range(1, 26)]
+        # print(imagetype)
+        random.shuffle(imagetype)
+
+        # print(imagetype)
+
+        train_end = int(8 * (len(imagetype)) * 0.1)
+
+        for i in range(0, len(imagetype)):
+            if imagetype[i] < 10:
+                imagetype[i] = 'i0' + str(imagetype[i])
+            else:
+                imagetype[i] = 'i' + str(imagetype[i])
+        #print(imagetype)
+
+        train_ref_list = imagetype[:train_end]
+        test__ref_list = imagetype[train_end:]
+
+        train_list = []
+        test_list = []
+
+        for i in range(0, len(imageList)):
+            image_type = imageList[i][0].split("_")[0]
+            # print(image_type)
+
+            if image_type in train_ref_list:
+                train_list.append(imageList[i])
+            else:
+                test_list.append(imageList[i])
+        return test_list
+
     def generateTrainTestDataSet(self,percentage=[8,2]):
         imageList = self._prase_file()
         imagetype = [i for i in range(1, 26)]
@@ -92,7 +163,7 @@ class TID2013Dataset(object):
                 imagetype[i] = 'i0'+str(imagetype[i])
             else:
                 imagetype[i] = 'i' + str(imagetype[i])
-        print(imagetype)
+        #print(imagetype)
 
         train_ref_list = imagetype[:train_end]
         test__ref_list = imagetype[train_end:]
@@ -114,12 +185,22 @@ class TID2013Dataset(object):
         self.save(name=self.path_to_train_db,nameList=train_list)
         self.save(name = self.path_to_test_db,nameList=test_list)
 
+    def generateSingleDataset(self,image_name,demos,type):
+        image = Image.open(self.path_to_images + image_name)
+        width, height = image.size
+
+        # crop image with stride
+        crop_images = self._crop_pil_stride(image, 64, 224, 224)
+
+        self.save_single(self.path_to_single_db, crop_images, demos, type)
+
+
     def preprocessing(self, features):
         dmos = tf.cast(features['dmos'], tf.float32)
         dmos = tf.reshape(dmos, [1])
-        hight = tf.cast(features['height'], tf.int64)
-        width = tf.cast(features['width'], tf.int64)
-        channel = tf.cast(features['channel'], tf.int64)
+        hight = tf.cast(features['height'], tf.int32)
+        width = tf.cast(features['width'], tf.int32)
+        channel = tf.cast(features['channel'], tf.int32)
         img = tf.decode_raw(features['image_raw'], tf.uint8)
         img = tf.reshape(img, [hight, width, channel])
 
@@ -129,6 +210,20 @@ class TID2013Dataset(object):
 
         img = self._mean_image_subtraction(img, self.means, 3)
 
+        return dmos, img
+
+    def preprocessing_mean_sub(self,features):
+        dmos = tf.cast(features['dmos'], tf.float32)
+        dmos = tf.reshape(dmos, [1])
+        # hight = tf.cast(features['height'], tf.int64)
+        # width = tf.cast(features['width'], tf.int64)
+        # channel = tf.cast(features['channel'], tf.int64)
+        img = tf.decode_raw(features['image_raw'], tf.uint8)
+        img = tf.reshape(img, self.crop_shape)
+
+        img = tf.to_float(img)
+
+        img = self._mean_image_subtraction(img, self.means,3)
         return dmos, img
 
     def _mean_image_subtraction(self, image, means, channel):
@@ -153,6 +248,18 @@ class TID2013Dataset(object):
         dataset = dataset.batch(self.batch_size)
         return dataset
 
+    def get_single_dataset(self,image_name,demos,type):
+        self.generateSingleDataset(image_name,demos,type)
+
+        dataset = tf.data.TFRecordDataset([self.path_to_single_db])
+        dataset = dataset.map(self.decode_tfrecord)
+        dataset = dataset.map(self.preprocessing_mean_sub)
+        dataset = dataset.batch(self.batch_size)
+
+        return dataset
+
+
+
     def decode_tfrecord(self, value):
         features = tf.parse_single_example(value,
                                            features={
@@ -165,6 +272,31 @@ class TID2013Dataset(object):
                                            })
         return features
 
+
+    def _crop_pil_stride(self,image,stride,crop_height,crop_width):
+        width, height = image.size
+        images = []
+        for offset_width in range(0,width,stride):
+            for offset_height in range(0,height,stride):
+                images_crop = self._crop_pil(image,offset_height,offset_width,crop_height,crop_width)
+                images.append(images_crop)
+
+        return images
+
+    def _crop_pil(self,image,offset_height,offset_width,crop_height,crop_width):
+        width,height = image.size
+
+        if offset_height > height or offset_width > width:
+            assert "Error with offset"
+
+        if offset_width+crop_width > width :
+            offset_width = width - crop_width
+        if offset_height+crop_height > height:
+            offset_height = height - crop_height
+
+        image_croped = image.crop((offset_width,offset_height,offset_width+crop_width,offset_height+crop_height))
+
+        return image_croped
 
 
 

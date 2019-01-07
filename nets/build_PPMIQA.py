@@ -15,6 +15,7 @@ from data.LiveCHIQADataset import LiveCHIQADataset
 from data.TID2013Dataset import TID2013Dataset
 from data.SynIQADataset import SynIQADataset
 from nets.PPMIQA_network import PPMIQA
+import time
 from scipy.stats import spearmanr
 from scipy.stats import pearsonr
 
@@ -24,12 +25,14 @@ class PPMIQAmodel(object):
         return {
             'root_dir': "/home/wangkai/",
             'resnet_ckpt': "/home/wangkai/Paper_MultiFeature_Data/resnet/resnet_v1_50.ckpt",
-            'output_log': "../multib1b4_syn_data.txt",
-            'summary_dir': "../logs/multib1b4_syn_data",
-            'save_dir': "../save/multib1b4_syn_data/",
+            'output_log': "/home/wangkai/logs_save/multib1b4_tid2013_data.txt",
+            'summary_dir': "/home/wangkai/logs_save/logs/multib1b4_tid2013_data",
+            'save_dir': "/home/wangkai/logs_save/save/multib1b4_tid2013_data/",
             'train': False,
-            'restore_file': '../save/multib1b4_syn_data/',
-            'restore_name': 'saved_15ckpt',
+            'mode':'test_single',
+            'dataset':'TID2013Dataset',
+            'restore_file': '/home/wangkai/logs_save/save/multib1b4_tid2013_data/',
+            'restore_name': 'saved_7ckpt',
             'orginal_learning_rate': 0.001,
             'decay_steps': 10,
             'decay_rate': 0.1,
@@ -41,20 +44,24 @@ class PPMIQAmodel(object):
             'width': 224,
             'channels': 3}
 
-    def __init__(self):
+    def __init__(self,image_name,demos,type):
+        self.image_name = image_name
+        self.demos = demos
+        self.type = type
 
         self.params = self.default_params()
 
         self.graph = tf.Graph()
 
-        gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.8)
+        gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.2)
 
         self.sess = tf.Session(graph=self.graph,config=tf.ConfigProto(gpu_options=gpu_options))
 
         with self.graph.as_default():
             self.ops = {}
             self.data = {}
-            self.get_DataSet()
+            #self.get_DataSet()
+            self.get_dataSet_with_name_mode()
 
             self.build_PPMIQA_net()
 
@@ -64,6 +71,48 @@ class PPMIQAmodel(object):
                 self.initial_model()
             else:
                 self.restore_model(self.params['save_dir'])
+
+
+    def createInstance(self,module_name,class_name,*args,**kwargs):
+        module = __import__(module_name,globals(),locals(),[class_name])
+        class_instance = getattr(module,class_name)
+        obj = class_instance(*args,**kwargs)
+        return obj
+
+    def get_dataSet_with_name_mode(self):
+
+
+        '''
+        get the dataset with the name and
+        :return:
+        '''
+
+        batch_size = self.params['batch_size']
+
+        if self.params['train'] is not True:
+            batch_size = 1
+
+        dataset = self.createInstance('data.' + self.params['dataset'], self.params['dataset'],
+                                      batch_size=batch_size, shuffle=True, crop_size=50,
+                                      num_epochs=self.params['corp_size'],
+                                      crop_shape=[self.params['height'], self.params['width'],
+                                                  self.params['channels']])
+
+
+        if 'test_single' == self.params['mode']:
+
+            dataset = dataset.get_single_dataset(self.image_name,self.demos,self.type)
+
+        iter = tf.data.Iterator.from_structure(dataset.output_types, dataset.output_shapes)
+
+        self.ops['init_op'] = iter.make_initializer(dataset)
+
+        self.data['demos'], self.data['image'] = iter.get_next()
+
+        return dataset
+
+
+
     def get_DataSet(self):
         '''
         this is the function to get the Dataset
@@ -79,46 +128,46 @@ class PPMIQAmodel(object):
         #                          num_epochs=self.params['corp_size'],
         #                          crop_shape=[self.params['height'], self.params['width'], self.params['channels']])
 
-        # dataset = TID2013Dataset(batch_size=self.params['batch_size'], shuffle=True, crop_size=50,
-        #                            num_epochs=self.params['corp_size'],
-        #                            crop_shape=[self.params['height'], self.params['width'], self.params['channels']])
+        dataset = TID2013Dataset(batch_size=self.params['batch_size'], shuffle=True, crop_size=50,
+                                   num_epochs=self.params['corp_size'],
+                                   crop_shape=[self.params['height'], self.params['width'], self.params['channels']])
 
-        if self.params['train'] is True:
-            dataset = SynIQADataset(batch_size=self.params['batch_size'], shuffle=True, crop_size=50,
-                                 num_epochs=self.params['corp_size'],
-                                 crop_shape=[self.params['height'], self.params['width'], self.params['channels']])
-            dataset = dataset.get_train_dataset()
-        else:
-            dataset = SynIQADataset(batch_size=1, shuffle=True, crop_size=50,
-                                    num_epochs=self.params['corp_size'],
-                                    crop_shape=[self.params['height'], self.params['width'], self.params['channels']])
-            #dataset = dataset.get_test_dataset()
-            dataset = dataset.get_single_dataset(image_name='01_18_02_Book_arrival_A2_10_to_9_70.bmp', demos= 3.933333333)
-
-        iter = tf.data.Iterator.from_structure(dataset.output_types, dataset.output_shapes)
-
-        self.ops['init_op'] = iter.make_initializer(dataset)
-
-        self.data['demos'], self.data['image'] = iter.get_next()
-
-        # # get the train dataset
-        # train_dataset = dataset.get_train_dataset()
-        # # get the test dataset
-        # test_dataset = dataset.get_test_dataset()
+        # if self.params['train'] is True:
+        #     dataset = SynIQADataset(batch_size=self.params['batch_size'], shuffle=True, crop_size=50,
+        #                          num_epochs=self.params['corp_size'],
+        #                          crop_shape=[self.params['height'], self.params['width'], self.params['channels']])
+        #     dataset = dataset.get_train_dataset()
+        # else:
+        #     dataset = SynIQADataset(batch_size=1, shuffle=True, crop_size=50,
+        #                             num_epochs=self.params['corp_size'],
+        #                             crop_shape=[self.params['height'], self.params['width'], self.params['channels']])
+        #     #dataset = dataset.get_test_dataset()
+        #     dataset = dataset.get_single_dataset(image_name='01_18_02_Book_arrival_A2_10_to_9_70.bmp', demos= 3.933333333)
         #
-        # # put it in the params dict
-        # self.params['train_dataset'] = train_dataset
-        # self.params['test_dataset'] = test_dataset
+        # iter = tf.data.Iterator.from_structure(dataset.output_types, dataset.output_shapes)
         #
-        # # set the dict of both train and test
-        # iter = tf.data.Iterator.from_structure(train_dataset.output_types, train_dataset.output_shapes)
+        # self.ops['init_op'] = iter.make_initializer(dataset)
         #
-        # # define the init op of train step and test step
-        # self.ops['train_init_op'] = iter.make_initializer(train_dataset)
-        # self.ops['test_init_op'] = iter.make_initializer(test_dataset)
-        #
-        # # get the demo and image from the dataset
         # self.data['demos'], self.data['image'] = iter.get_next()
+
+        # get the train dataset
+        train_dataset = dataset.get_train_dataset()
+        # get the test dataset
+        test_dataset = dataset.get_test_dataset()
+
+        # put it in the params dict
+        self.params['train_dataset'] = train_dataset
+        self.params['test_dataset'] = test_dataset
+
+        # set the dict of both train and test
+        iter = tf.data.Iterator.from_structure(train_dataset.output_types, train_dataset.output_shapes)
+
+        # define the init op of train step and test step
+        self.ops['train_init_op'] = iter.make_initializer(train_dataset)
+        self.ops['test_init_op'] = iter.make_initializer(test_dataset)
+
+        # get the demo and image from the dataset
+        self.data['demos'], self.data['image'] = iter.get_next()
 
     def build_PPMIQA_net(self):
         self.net = PPMIQA()
@@ -192,7 +241,7 @@ class PPMIQAmodel(object):
             for epochs in range(self.params['epochs']):
                 self.current_epoch = epochs + 1
                 for corp_time in range(5):
-                    self.sess.run(self.ops['init_op'])
+                    self.sess.run(self.ops['train_init_op'])
                     # print(self.sess.run([self.data['image']]))
 
                     while True:
@@ -283,7 +332,7 @@ class PPMIQAmodel(object):
               "PLCC = " + str(plcc).ljust(25) +
               "mean_loss = " + str(sum_l / 50).ljust(25))
 
-    def test_single_image(self):
+    def test_single_image(self,type):
         self.sess.run(self.ops['init_op'])
         predictions_list =[]
         while True:
@@ -295,10 +344,23 @@ class PPMIQAmodel(object):
             except tf.errors.OutOfRangeError:
                 break
         predictions_array = np.asarray(predictions_list)
-        print("predictions %s."%predictions_array.mean())
-        print("ground turth %s."%demos_v[0][0])
-        print("loss: %s."%loss_v)
+        print("type=%2s. predictions=%10s. gt=%10s. loss=%10s." % (type,predictions_array.mean(),demos_v[0][0],loss_v))
+
+        return type,predictions_array.mean(),demos_v[0][0],loss_v
+
+    def train_with_test(self):
+        pass
 
 
-model = PPMIQAmodel()
-model.test_single_image()
+# model = PPMIQAmodel()
+# model.train()
+
+dataset = TID2013Dataset(1, shuffle=True, crop_size=50, num_epochs=10, crop_shape=[224,224,3])
+
+ImageList = dataset.get_test_list()
+with open('/home/wangkai/logs_save/tid2013_type.txt','w') as file:
+    for im_name,demos,distort_type in ImageList:
+        model = PPMIQAmodel(im_name,demos,distort_type)
+        type_save,prediction_save,demos_save,loss_save=model.test_single_image(distort_type)
+        file.write(str(type_save)+" "+str(prediction_save)+" "+str(demos_save)+" "+str(loss_save))
+        time.sleep(3)
