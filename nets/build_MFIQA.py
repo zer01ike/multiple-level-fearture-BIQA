@@ -3,7 +3,10 @@ from __future__ import print_function, unicode_literals
 import tensorflow as tf
 from nets.MFIQA_network import MFIQA_network
 from data.LiveIQADataset import LiveIQADataset
+from data.TID2013Dataset import TID2013Dataset
 import numpy as np
+import os
+import time
 from scipy.stats import spearmanr
 from scipy.stats import pearsonr
 
@@ -19,13 +22,18 @@ class MFIQAmodel(object):
         return {
             'root_dir': "/home/wangkai/",
             'resnet_ckpt': "/home/wangkai/Paper_MultiFeature_Data/resnet/resnet_v1_50.ckpt",
-            'summary_dir': "../logs/batch128epochs40",
-            'save_dir': "../save/tfdatamodel_test/",
+            'summary_dir': "/home/wangkai/logs_save/logs/mfiqa_tid2013/",
+            'save_dir': "/home/wangkai/logs_save/save/mfiqa_tid2013_train_test/",
             'orginal_learning_rate': 0.001,
+            'restore_file': '/home/wangkai/logs_save/save/mfiqa_tid2013_train_test/',
+            'restore_name': 'saved_7ckpt',
+            'mode': 'test_single',
+            'dataset': 'TID2013Dataset',
+            'train': True,
             'decay_steps': 10,
             'decay_rate': 0.1,
             'momentum': 0.9,
-            'epochs': 100,
+            'epochs': 8,
             'corp_size': 10,
             'batch_size': 32,
             'height': 224,
@@ -34,15 +42,18 @@ class MFIQAmodel(object):
 
         }
 
-    def __init__(self):
+    def __init__(self,image_name,demos,type):
         # get the params to use
+        self.image_name = image_name
+        self.demos = demos
+        self.type = type
         self.params = self.default_params()
 
         # set the grpah
         self.graph = tf.Graph()
 
         # set the gpu options
-        gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.8)
+        gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.9)
 
         # set the sess
         self.sess = tf.Session(graph=self.graph, config=tf.ConfigProto(gpu_options=gpu_options))
@@ -61,6 +72,7 @@ class MFIQAmodel(object):
             # define the data dict
             self.data = {}
             self.get_DataSet()
+            #self.get_dataSet_with_name_mode()
 
             # build the network
             self.build_MFIQA_net()
@@ -69,7 +81,12 @@ class MFIQAmodel(object):
             self.make_train_step()
 
             # paramater initilizer or restore model
-            self.initial_model()
+            #self.initial_model()
+
+            if self.params['train'] is True:
+                self.initial_model()
+            else:
+                self.restore_model(self.params['save_dir'])
 
     # def build_placeholders(self):
     #     self.placeholders['X'] = tf.placeholder(tf.float32, shape=[self.params['batch_size'], self.params['height'], self.params['width'], self.params['channels']], name='x_input')
@@ -82,7 +99,10 @@ class MFIQAmodel(object):
         '''
 
         # get the dataset from the LiveIQA Dataset
-        dataset = LiveIQADataset(mode='training', batch_size=self.params['batch_size'], shuffle=True, crop_size=50,
+        # dataset = LiveIQADataset(mode='training', batch_size=self.params['batch_size'], shuffle=True, crop_size=50,
+        #                          num_epochs=self.params['corp_size'],
+        #                          crop_shape=[self.params['height'], self.params['width'], self.params['channels']])
+        dataset = TID2013Dataset(batch_size=self.params['batch_size'], shuffle=True, crop_size=50,
                                  num_epochs=self.params['corp_size'],
                                  crop_shape=[self.params['height'], self.params['width'], self.params['channels']])
 
@@ -104,6 +124,67 @@ class MFIQAmodel(object):
 
         # get the demo and image from the dataset
         self.data['demos'], self.data['image'] = iter.get_next()
+
+    def createInstance(self,module_name,class_name,*args,**kwargs):
+        module = __import__(module_name,globals(),locals(),[class_name])
+        class_instance = getattr(module,class_name)
+        obj = class_instance(*args,**kwargs)
+        return obj
+
+    def get_dataSet_with_name_mode(self):
+
+
+        '''
+        get the dataset with the name and
+        :return:
+        '''
+
+        batch_size = self.params['batch_size']
+
+        if self.params['train'] is not True:
+            batch_size = 1
+
+        dataset = self.createInstance('data.' + self.params['dataset'], self.params['dataset'],
+                                      batch_size=batch_size, shuffle=True, crop_size=50,
+                                      num_epochs=self.params['corp_size'],
+                                      crop_shape=[self.params['height'], self.params['width'],
+                                                  self.params['channels']])
+
+
+        if 'test_single' == self.params['mode']:
+
+            dataset = dataset.get_single_dataset(self.image_name,self.demos,self.type)
+            iter = tf.data.Iterator.from_structure(dataset.output_types, dataset.output_shapes)
+
+            self.ops['init_op'] = iter.make_initializer(dataset)
+
+            self.data['demos'], self.data['image'] = iter.get_next()
+
+        elif 'train_and_test' == self.params['mode']:
+            train_dataset = dataset.get_train_dataset()
+            test_dataset = dataset.get_test_dataset()
+
+            iter = tf.data.Iterator.from_structure(dataset.output_types,dataset.output_shapes)
+
+            self.ops['train_init_op'] = iter.make_initializer(train_dataset)
+            self.ops['test_init_op'] = iter.make_initializer(test_dataset)
+
+            self.data['demos'],self.data['image'] = iter.get_next()
+        elif 'train' == self.params['mode']:
+            train_dataset = dataset.get_train_dataset()
+            self.ops['init_op'] = iter.make_initializer(train_dataset)
+
+            self.data['demos'], self.data['image'] = iter.get_next()
+        elif 'test' == self.params['mode']:
+            test_dataset = dataset.get_test_dataset()
+
+            self.ops['init_op'] = iter.make_initializer(test_dataset)
+
+            self.data['demos'], self.data['image'] = iter.get_next()
+
+        else:
+            assert("Your should define the Mode first!")
+            exit(code=25)
 
     def build_MFIQA_net(self):
         '''
@@ -217,6 +298,14 @@ class MFIQAmodel(object):
             coord.join(threads)
             # for i in range(self.params['corp_size']):
             #     _,loss_v,predicitons_v =self.sess.run()
+    def restore_model(self, path: str) -> None:
+        full_path = os.path.join(path, self.params['restore_name'])
+        print("Restoring weights from file %s." % full_path)
+        loader = tf.train.Saver()
+
+        loader.restore(self.sess, full_path)
+
+        self.ops['merged'] = tf.summary.merge_all()
 
     def train(self):
         total_step = 0
@@ -225,7 +314,7 @@ class MFIQAmodel(object):
                 self.current_epoch = epochs + 1
                 for corp_time in range(5):
                     self.sess.run(self.ops['train_init_op'])
-                    print(self.sess.run([self.data['image']]))
+                    #print(self.sess.run([self.data['image']]))
 
                     while True:
                         try:
@@ -234,9 +323,9 @@ class MFIQAmodel(object):
                                  self.data['demos'], self.ops['learning_rate']])
                             total_step += 1
 
-                            if total_step % 20 == 0:
-                                print("Train:Eochs = " + str(epochs + 1).ljust(10) + "Step = " + str(total_step).ljust(
-                                    10) + "leraning_rate = " + str(learningrate_v).ljust(15) + "Loss = " + str(
+                            if total_step % 100 == 0:
+                                print("Train:Eochs = " + str(epochs + 1).ljust(2) + "Step = " + str(total_step).ljust(
+                                    5) + "leraning_rate = " + str(learningrate_v).ljust(15) + "Loss = " + str(
                                     loss_v).ljust(15) + "demos = " + str(
                                     np.sum(demos_v[:, 0]) / self.params['batch_size']).ljust(
                                     25) + "mean_prediction = " + str(
@@ -248,7 +337,6 @@ class MFIQAmodel(object):
                     self.sess.run(self.ops['learning_rate_decay'])
                 self.saver.save(self.sess, self.params['save_dir'] + 'saved_' + str(epochs) + 'ckpt')
 
-                # test sequence
                 predictions_total = []
                 demos_total = []
                 for crop_time in range(50):
@@ -282,18 +370,79 @@ class MFIQAmodel(object):
                     srcc, p_s = spearmanr(predictions_average, demos_average)
                     plcc, p_p = pearsonr(predictions_average, demos_average)
 
-                print("Test :Eochs = " + str(epochs + 1).ljust(10) +
+                print("Test :Eochs = " + str(1 + 1).ljust(2) +
                       "P_s =" + str(p_s).ljust(25) +
                       "SRCC = " + str(srcc).ljust(25) +
                       "P_P =" + str(p_p).ljust(25) +
                       "PLCC = " + str(plcc).ljust(25))
 
+
+
     def test(self):
-        # reload model
-        # run accuracy
-        # print srocc plcc
-        pass
+        predictions_total = []
+        demos_total = []
+        for crop_time in range(50):
+            self.sess.run(self.ops['test_init_op'])
+            predictions_each_epochs = []
+            demos_each_epochs = []
+            while True:
+                try:
+                    predictions_v, demos_v = self.sess.run([self.ops['predictions'], self.data['demos']])
+                    # print(predictions_v.shape,demos_v.shape)
+                    for i in range(predictions_v.shape[0]):
+                        predictions_each_epochs.append(predictions_v[i][0])
+                        demos_each_epochs.append(demos_v[i][0])
+                except tf.errors.OutOfRangeError:
+                    break
+            # get one epochs predictions and demos
+            predictions_total.append(predictions_each_epochs)
+            demos_total.append(demos_each_epochs)
+
+        predictions_average = []
+        demos_average = []
+
+        for x in range(len(predictions_total[0])):
+            sum_p = 0
+            sum_d = 0
+            for y in range(len(predictions_total)):
+                sum_p += predictions_total[y][x]
+                sum_d += demos_total[y][x]
+            predictions_average.append(sum_p / 50)
+            demos_average.append(sum_d / 50)
+            srcc, p_s = spearmanr(predictions_average, demos_average)
+            plcc, p_p = pearsonr(predictions_average, demos_average)
+
+        print("Test :Eochs = " + str(1 + 1).ljust(10) +
+              "P_s =" + str(p_s).ljust(25) +
+              "SRCC = " + str(srcc).ljust(25) +
+              "P_P =" + str(p_p).ljust(25) +
+              "PLCC = " + str(plcc).ljust(25))
+
+    def test_single_image(self,type):
+        self.sess.run(self.ops['init_op'])
+        predictions_list =[]
+        while True:
+            try:
+                predictions_v, demos_v, loss_v = self.sess.run([self.ops['predictions'],
+                                                                self.data['demos'],
+                                                                self.ops['loss']])
+                predictions_list.append(predictions_v)
+            except tf.errors.OutOfRangeError:
+                break
+        predictions_array = np.asarray(predictions_list)
+        print("type=%2s. predictions=%10s. gt=%10s. loss=%10s." % (type,predictions_array.mean(),demos_v[0][0],loss_v))
+
+        return type,predictions_array.mean(),demos_v[0][0],loss_v
 
 
-model = MFIQAmodel()
+model = MFIQAmodel(123,123,123)
 model.train()
+# dataset = TID2013Dataset(1, shuffle=True, crop_size=50, num_epochs=10, crop_shape=[224,224,3])
+#
+# ImageList = dataset.get_test_list()
+# with open('/home/wangkai/logs_save/mfiqa_tid2013_type.txt','w') as file:
+#     for im_name,demos,distort_type in ImageList:
+#         model = MFIQAmodel(im_name,demos,distort_type)
+#         type_save,prediction_save,demos_save,loss_save=model.test_single_image(distort_type)
+#         file.write(str(type_save)+" "+str(prediction_save)+" "+str(demos_save)+" "+str(loss_save)+"\n")
+#         time.sleep(2)

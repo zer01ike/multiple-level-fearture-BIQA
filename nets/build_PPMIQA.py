@@ -362,5 +362,5 @@ with open('/home/wangkai/logs_save/tid2013_type.txt','w') as file:
     for im_name,demos,distort_type in ImageList:
         model = PPMIQAmodel(im_name,demos,distort_type)
         type_save,prediction_save,demos_save,loss_save=model.test_single_image(distort_type)
-        file.write(str(type_save)+" "+str(prediction_save)+" "+str(demos_save)+" "+str(loss_save))
+        file.write(str(type_save)+" "+str(prediction_save)+" "+str(demos_save)+" "+str(loss_save)+"\n")
         time.sleep(3)
