@@ -36,7 +36,7 @@ class MFIQA_network(object):
 
             concat = tf.concat([encoder1, encoder2, encoder3, encoder4], -1, name='concat')
 
-            tensor_out = layers_lib.fully_connected(concat, 1, activation_fn=tf.nn.relu, scope="fintune_FC")
+            tensor_out = layers_lib.fully_connected(concat, 1, activation_fn=tf.nn.sigmoid, scope="fintune_FC")
             return tensor_out
 
     def resnet_reload(self, image):

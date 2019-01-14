@@ -22,18 +22,18 @@ class MFIQAmodel(object):
         return {
             'root_dir': "/home/wangkai/",
             'resnet_ckpt': "/home/wangkai/Paper_MultiFeature_Data/resnet/resnet_v1_50.ckpt",
-            'summary_dir': "/home/wangkai/logs_save/logs/mfiqa_tid2013/",
-            'save_dir': "/home/wangkai/logs_save/save/mfiqa_tid2013_train_test/",
+            'summary_dir': "/home/wangkai/logs_save/logs/mfiqa_tid2013_sigmod/",
+            'save_dir': "/home/wangkai/logs_save/save/mfiqa_tid2013_train_test_sigmod/",
             'orginal_learning_rate': 0.001,
-            'restore_file': '/home/wangkai/logs_save/save/mfiqa_tid2013_train_test/',
-            'restore_name': 'saved_7ckpt',
+            'restore_file': '/home/wangkai/logs_save/save/mfiqa_tid2013_train_test_sigmod/',
+            'restore_name': 'saved_9ckpt',
             'mode': 'test_single',
             'dataset': 'TID2013Dataset',
-            'train': True,
+            'train': False,
             'decay_steps': 10,
             'decay_rate': 0.1,
             'momentum': 0.9,
-            'epochs': 8,
+            'epochs': 20,
             'corp_size': 10,
             'batch_size': 32,
             'height': 224,
@@ -71,8 +71,8 @@ class MFIQAmodel(object):
 
             # define the data dict
             self.data = {}
-            self.get_DataSet()
-            #self.get_dataSet_with_name_mode()
+            #self.get_DataSet()
+            self.get_dataSet_with_name_mode()
 
             # build the network
             self.build_MFIQA_net()
@@ -132,8 +132,6 @@ class MFIQAmodel(object):
         return obj
 
     def get_dataSet_with_name_mode(self):
-
-
         '''
         get the dataset with the name and
         :return:
@@ -164,7 +162,7 @@ class MFIQAmodel(object):
             train_dataset = dataset.get_train_dataset()
             test_dataset = dataset.get_test_dataset()
 
-            iter = tf.data.Iterator.from_structure(dataset.output_types,dataset.output_shapes)
+            iter = tf.data.Iterator.from_structure(train_dataset.output_types,train_dataset.output_shapes)
 
             self.ops['train_init_op'] = iter.make_initializer(train_dataset)
             self.ops['test_init_op'] = iter.make_initializer(test_dataset)
@@ -172,14 +170,14 @@ class MFIQAmodel(object):
             self.data['demos'],self.data['image'] = iter.get_next()
         elif 'train' == self.params['mode']:
             train_dataset = dataset.get_train_dataset()
-            iter = tf.data.Iterator.from_structure(dataset.output_types, dataset.output_shapes)
+            iter = tf.data.Iterator.from_structure(train_dataset.output_types,train_dataset.output_shapes)
             self.ops['init_op'] = iter.make_initializer(train_dataset)
 
             self.data['demos'], self.data['image'] = iter.get_next()
         elif 'test' == self.params['mode']:
             test_dataset = dataset.get_test_dataset()
 
-            iter = tf.data.Iterator.from_structure(dataset.output_types, dataset.output_shapes)
+            iter = tf.data.Iterator.from_structure(test_dataset.output_types, test_dataset.output_shapes)
 
             self.ops['init_op'] = iter.make_initializer(test_dataset)
 
@@ -310,7 +308,7 @@ class MFIQAmodel(object):
 
         self.ops['merged'] = tf.summary.merge_all()
 
-    def train(self):
+    def train_and_test(self):
         total_step = 0
         with self.graph.as_default():
             for epochs in range(self.params['epochs']):
@@ -438,14 +436,14 @@ class MFIQAmodel(object):
         return type,predictions_array.mean(),demos_v[0][0],loss_v
 
 
-model = MFIQAmodel(123,123,123)
-model.train()
-# dataset = TID2013Dataset(1, shuffle=True, crop_size=50, num_epochs=10, crop_shape=[224,224,3])
-#
-# ImageList = dataset.get_test_list()
-# with open('/home/wangkai/logs_save/mfiqa_tid2013_type.txt','w') as file:
-#     for im_name,demos,distort_type in ImageList:
-#         model = MFIQAmodel(im_name,demos,distort_type)
-#         type_save,prediction_save,demos_save,loss_save=model.test_single_image(distort_type)
-#         file.write(str(type_save)+" "+str(prediction_save)+" "+str(demos_save)+" "+str(loss_save)+"\n")
-#         time.sleep(2)
+# model = MFIQAmodel(123,123,123)
+# model.train_and_test()
+dataset = TID2013Dataset(1, shuffle=True, crop_size=50, num_epochs=10, crop_shape=[224,224,3])
+
+ImageList = dataset.get_test_list()
+with open('/home/wangkai/logs_save/mfiqa_tid2013_sigmod_type.txt','w') as file:
+    for im_name,demos,distort_type in ImageList:
+        model = MFIQAmodel(im_name,demos,distort_type)
+        type_save,prediction_save,demos_save,loss_save=model.test_single_image(distort_type)
+        file.write(str(type_save)+" "+str(prediction_save)+" "+str(demos_save)+" "+str(loss_save)+"\n")
+        #time.sleep(2)

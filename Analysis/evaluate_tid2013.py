@@ -3,7 +3,7 @@ from scipy.stats import pearsonr
 
 result = []
 
-with open('/home/wangkai/logs_save/mfiqa_tid2013_type.txt') as file:
+with open('/home/wangkai/logs_save/mfiqa_tid2013_sigmod_type.txt') as file:
     lines = file.readlines()
     for line in lines:
         line = line.strip("\n")
