@@ -172,18 +172,21 @@ class MFIQAmodel(object):
             self.data['demos'],self.data['image'] = iter.get_next()
         elif 'train' == self.params['mode']:
             train_dataset = dataset.get_train_dataset()
+            iter = tf.data.Iterator.from_structure(dataset.output_types, dataset.output_shapes)
             self.ops['init_op'] = iter.make_initializer(train_dataset)
 
             self.data['demos'], self.data['image'] = iter.get_next()
         elif 'test' == self.params['mode']:
             test_dataset = dataset.get_test_dataset()
 
+            iter = tf.data.Iterator.from_structure(dataset.output_types, dataset.output_shapes)
+
             self.ops['init_op'] = iter.make_initializer(test_dataset)
 
             self.data['demos'], self.data['image'] = iter.get_next()
 
         else:
-            assert("Your should define the Mode first!")
+            assert("Error: Your should define the Mode first!")
             exit(code=25)
 
     def build_MFIQA_net(self):

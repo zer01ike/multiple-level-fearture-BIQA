@@ -9,5 +9,5 @@ class network(object):
     def inference(self):
         pass
 
-    def netwokr_structure(self):
+    def network_structure(self):
         pass
