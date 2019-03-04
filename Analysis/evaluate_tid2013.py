@@ -3,13 +3,26 @@ from scipy.stats import pearsonr
 
 result = []
 
-with open('/home/wangkai/logs_save/mfiqa_tid2013_sigmod_type.txt') as file:
+with open('/home/wangkai/logs_save/mfiqa_tid2013_sigmod_type_final.txt') as file:
     lines = file.readlines()
     for line in lines:
         line = line.strip("\n")
         result.append(line.split(" "))
 
 #print(result)
+
+def rmse(target,prediction):
+    error = []
+    for i in range(len(target)):
+        error.append(target[i] - prediction[i])
+
+    squaredError = []
+    absError = []
+    for val in error:
+        squaredError.append(val * val)  # target-prediction之差平方
+        absError.append(abs(val))  # 误差绝对值
+    from math import sqrt
+    print("RMSE = ", sqrt(sum(squaredError) / len(squaredError)))
 
 def get_result(type):
     #type = 5
@@ -22,6 +35,8 @@ def get_result(type):
            demos_list.append(float(one_result[2]))
 
     #print(predictions_list)
+
+    rmse(demos_list,predictions_list)
 
     srcc, p_s = spearmanr(predictions_list, demos_list)
     plcc, p_p = pearsonr(predictions_list, demos_list)

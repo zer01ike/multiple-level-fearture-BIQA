@@ -18,7 +18,7 @@ class data (object):
     def get_train_dataset(self):
         pass
 
-    def __mean_image_subtraction(self,image,means,channel):
+    def __mean_image_subtraction(self, image, means, channel):
         image_channels = tf.split(axis=2, num_or_size_splits=channel, value=image)
         for i in range(channel):
             image_channels[i] -= means[i]

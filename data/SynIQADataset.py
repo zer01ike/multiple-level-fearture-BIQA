@@ -9,6 +9,7 @@ from typing import List
 import numpy as np
 from PIL import Image
 import tensorflow as tf
+import matplotlib.pyplot as plt
 
 class SynIQADataset(object):
     def __init__(self, batch_size=1, shuffle=True, crop_size=50, num_epochs=10, crop_shape=[224,224,3]):
@@ -17,6 +18,7 @@ class SynIQADataset(object):
         self.path_to_train_db = '/home/wangkai/Paper_MultiFeature_Data/syn_data/train_normalized.tfrecord'
         self.path_to_test_db = '/home/wangkai/Paper_MultiFeature_Data/syn_data/test_normalized.tfrecord'
         self.path_to_single_db = '/home/wangkai/Paper_MultiFeature_Data/syn_data/single_normalized.tfrecord'
+        self.path_to_singlepatch_db = '/home/wangkai/Paper_MultiFeature_Data/syn_data/singlepatch_normalized.tfrecord'
 
         self.batch_size = batch_size
         self.shuffle = shuffle
@@ -28,19 +30,20 @@ class SynIQADataset(object):
     def preprocessing(self, features):
         dmos = tf.cast(features['dmos'], tf.float32)
         dmos = tf.reshape(dmos, [1])
-        hight = tf.cast(features['height'], tf.int64)
-        width = tf.cast(features['width'], tf.int64)
-        channel = tf.cast(features['channel'], tf.int64)
+        hight = tf.cast(features['height'], tf.int32)
+        width = tf.cast(features['width'], tf.int32)
+        channel = tf.cast(features['channel'], tf.int32)
         img = tf.decode_raw(features['image_raw'], tf.uint8)
-        img = tf.reshape(img, [hight, width, channel])
+        img = tf.reshape(img, [hight,width,channel])
 
         # pass
         img = tf.random_crop(img, self.crop_shape)
         img = tf.to_float(img)
 
-        img = self._mean_image_subtraction(img,self.means)
+        img = self._mean_image_subtraction(img, self.means,3)
 
         return dmos, img
+
     def preprocessing_mean_sub(self,features):
         dmos = tf.cast(features['dmos'], tf.float32)
         dmos = tf.reshape(dmos, [1])
@@ -52,13 +55,13 @@ class SynIQADataset(object):
 
         img = tf.to_float(img)
 
-        img = self._mean_image_subtraction(img, self.means)
+        img = self._mean_image_subtraction(img, self.means,3)
         return dmos, img
 
-    def _mean_image_subtraction(self, img, means):
+    def _mean_image_subtraction(self, image, means, channel):
 
-        image_channels = tf.split(axis=2, num_or_size_splits=3, value=img)
-        for i in range(3):
+        image_channels = tf.split(axis=2, num_or_size_splits=channel, value=image)
+        for i in range(channel):
             image_channels[i] -= means[i]
         return tf.concat(axis=2, values=image_channels)
 
@@ -77,13 +80,21 @@ class SynIQADataset(object):
 
         return dataset
 
-    def get_single_dataset(self, image_name, demos):
+    def get_single_dataset(self, image_name, demos,type):
         self.generateSingleDataset(image_name, demos)
         dataset = tf.data.TFRecordDataset([self.path_to_single_db])
         dataset = dataset.map(self.decode_tfrecord)
         dataset = dataset.map(self.preprocessing_mean_sub)
         dataset = dataset.batch(self.batch_size)
 
+        return dataset
+
+    def get_patch_dataset(self,image_name,demos,type):
+        self.generateSinglePatchDataset(image_name,demos)
+        dataset = tf.data.TFRecordDataset([self.path_to_singlepatch_db])
+        dataset = dataset.map(self.decode_tfrecord)
+        dataset = dataset.map(self.preprocessing_mean_sub)
+        dataset = dataset.batch(self.batch_size)
         return dataset
 
     def decode_tfrecord(self, value):
@@ -114,6 +125,14 @@ class SynIQADataset(object):
 
         return imageList
 
+    def get_test_list(self):
+        imageList = self._prase_file()
+
+        train_end = int(8 * (len(imageList)) * 0.1)
+        test_list = imageList[train_end:]
+
+        return test_list
+
     def generateTrainTestDataSet(self, percentage=[8, 2]):
         imageList = self._prase_file()
 
@@ -140,6 +159,11 @@ class SynIQADataset(object):
         # for i in crop_images:
         #     i.save(save_dir+str(count)+'.bmp')
         #     count += 1
+
+    def generateSinglePatchDataset(self,file_name,demos):
+        image = Image.open(file_name)
+        image = [image]
+        self.save_single(self.path_to_singlepatch_db,image,demos)
 
 
     def _crop_pil_stride(self,image,stride,crop_height,crop_width):
@@ -286,6 +310,11 @@ class SynIQADataset(object):
 if __name__ == '__main__':
     dataset = SynIQADataset(25)
     #dataset.generateTrainTestDataSet()
-    file_name ='01_72_04_Book_arrival_A6_8_to_9_70.bmp'
+    file_name ='03_83_03_Newspaper_A7_6_to_5_136.bmp'
     demos = 3.666666667
-    dataset.generateSingleDataset(file_name,demos)
+    #dataset.generateSingleDataset(file_name,demos)
+    file_image = Image.open('/home/wangkai/Paper_MultiFeature_Data/syn_data/images/' + file_name)
+    crop_images = dataset._crop_pil_stride(file_image, 64, 224, 224)
+    for i in range(0,len(crop_images)):
+        crop_images[i].save('/home/wangkai/Paper_MultiFeature_Data/syn_data/single_image/'+str(i)+'.bmp')
+

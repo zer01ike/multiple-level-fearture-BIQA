@@ -4,6 +4,8 @@ import tensorflow as tf
 from nets.MFIQA_network import MFIQA_network
 from data.LiveIQADataset import LiveIQADataset
 from data.TID2013Dataset import TID2013Dataset
+from data.IETRDataset import IETRDataset
+from data.SynIQADataset import SynIQADataset
 import numpy as np
 import os
 import time
@@ -22,18 +24,18 @@ class MFIQAmodel(object):
         return {
             'root_dir': "/home/wangkai/",
             'resnet_ckpt': "/home/wangkai/Paper_MultiFeature_Data/resnet/resnet_v1_50.ckpt",
-            'summary_dir': "/home/wangkai/logs_save/logs/mfiqa_tid2013_sigmod/",
+            'summary_dir': "/home/wangkai/logs_save/logs/mfiqa_tid2013_train_test_sigmod/",
             'save_dir': "/home/wangkai/logs_save/save/mfiqa_tid2013_train_test_sigmod/",
             'orginal_learning_rate': 0.001,
             'restore_file': '/home/wangkai/logs_save/save/mfiqa_tid2013_train_test_sigmod/',
-            'restore_name': 'saved_9ckpt',
+            'restore_name': 'saved_27ckpt',
             'mode': 'test_single',
             'dataset': 'TID2013Dataset',
             'train': False,
             'decay_steps': 10,
             'decay_rate': 0.1,
             'momentum': 0.9,
-            'epochs': 20,
+            'epochs': 100,
             'corp_size': 10,
             'batch_size': 32,
             'height': 224,
@@ -439,11 +441,30 @@ class MFIQAmodel(object):
 # model = MFIQAmodel(123,123,123)
 # model.train_and_test()
 dataset = TID2013Dataset(1, shuffle=True, crop_size=50, num_epochs=10, crop_shape=[224,224,3])
-
+#
 ImageList = dataset.get_test_list()
-with open('/home/wangkai/logs_save/mfiqa_tid2013_sigmod_type.txt','w') as file:
+with open('/home/wangkai/logs_save/mfiqa_tid2013_sigmod_type_final.txt','w') as file:
     for im_name,demos,distort_type in ImageList:
         model = MFIQAmodel(im_name,demos,distort_type)
         type_save,prediction_save,demos_save,loss_save=model.test_single_image(distort_type)
         file.write(str(type_save)+" "+str(prediction_save)+" "+str(demos_save)+" "+str(loss_save)+"\n")
         #time.sleep(2)
+
+# dataset = SynIQADataset(1, shuffle=True, crop_size=50, num_epochs=10, crop_shape=[224,224,3])
+#
+# ImageList = dataset.get_test_list()
+# with open('/home/wangkai/logs_save/mfiqa_tid2013_on_tid2013_no_type.txt','w') as file:
+#     for im_name,demos in ImageList:
+#         model = MFIQAmodel(im_name,demos,0)
+#         type_save,prediction_save,demos_save,loss_save=model.test_single_image(0)
+#         file.write(str(type_save)+" "+str(prediction_save)+" "+str(demos_save)+" "+str(loss_save)+"\n")
+
+# dataset = IETRDataset(1)
+#
+# ImageList = dataset._prase_file()
+#
+# with open('/home/wangkai/logs_save/mfiqa_itear_type.txt','w') as file:
+#     for image,demos,type in ImageList:
+#         model = MFIQAmodel(image,demos,type)
+#         type_save,prediction_save,demos_save,loss_save = model.test_single_image(type)
+#         file.write(str(type_save) + " " + str(prediction_save) + " " + str(demos_save) + " " + str(loss_save) + "\n")

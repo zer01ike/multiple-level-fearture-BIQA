@@ -9,14 +9,15 @@ import numpy as np
 from PIL import Image
 import tensorflow as tf
 import random
+import pandas as pd
 
-class TID2013Dataset(object):
+class IrccynDataset(object):
     def __init__(self,batch_size, shuffle=True, crop_size=50, num_epochs=10, crop_shape=[224,224,3]):
-        self.path_to_mosandnames = '/home/wangkai/Paper_MultiFeature_Data/tid2013/mos_with_names.txt'
-        self.path_to_images = '/home/wangkai/Paper_MultiFeature_Data/tid2013/distorted_images/'
-        self.path_to_train_db = '/home/wangkai/Paper_MultiFeature_Data/tid2013/train_normalized.tfrecord'
-        self.path_to_test_db = '/home/wangkai/Paper_MultiFeature_Data/tid2013/test_normalized.tfrecord'
-        self.path_to_single_db = '/home/wangkai/Paper_MultiFeature_Data/tid2013/single_normalized.tfrecord'
+        self.path_to_mos = '/home/wangkai/Paper_MultiFeature_Data/IRCCyN_IVC_DIBR_dataset/IRCCyN_IVC_DIBR_Images_Database_ACR_Score.xlsx'
+        self.path_to_images = '/home/wangkai/Paper_MultiFeature_Data/IRCCyN_IVC_DIBR_dataset/Images/'
+        self.path_to_train_db = '/home/wangkai/Paper_MultiFeature_Data/IRCCyN_IVC_DIBR_dataset/train_normalized.tfrecord'
+        self.path_to_test_db = '/home/wangkai/Paper_MultiFeature_Data/IRCCyN_IVC_DIBR_dataset/test_normalized.tfrecord'
+        self.path_to_single_db = '/home/wangkai/Paper_MultiFeature_Data/IRCCyN_IVC_DIBR_dataset/single_normalized.tfrecord'
 
         self.batch_size = batch_size
         self.shuffle = shuffle
@@ -26,18 +27,31 @@ class TID2013Dataset(object):
         self.means = [103.94, 116.78, 123.68]
 
     def _prase_file(self):
-        imageList = []
-
-        with open(self.path_to_mosandnames) as pathfile:
-            lines_pathfile = pathfile.readlines()
-
-            for eachline in lines_pathfile:
-                eachline = eachline.strip("\n")
-                demos,image = eachline.split(" ")
-                distort_type = image.split("_")[1]
-                imageList.append([image,demos,distort_type])
+        # imageList = []
+        #
+        # with open(self.path_to_mosandnames) as pathfile:
+        #     lines_pathfile = pathfile.readlines()
+        #
+        #     for eachline in lines_pathfile:
+        #         eachline = eachline.strip("\n")
+        #         demos,image = eachline.split(" ")
+        #         distort_type = image.split("_")[1]
+        #         imageList.append([image,demos,distort_type])
         #print(imageList)
+        dmos_file = pd.read_excel(self.path_to_mos)
+        dmos_file = dmos_file.dropna(axis=0,how='all')
+        imageList = []
+        #print(dmos_file)
+        index =0
+        for image, dmos in zip(dmos_file['image name'].values, dmos_file['Unnamed: 45'].values):
+            if index == 0 :
+                index +=1
+                continue
+            else:
+                imageList.append([image,dmos])
+                #index += 1
 
+        #print(imageList)
         return imageList
 
     def save(self,name=None,nameList=[]):
@@ -69,7 +83,6 @@ class TID2013Dataset(object):
                 'width': _int64_feature(width),
                 'channel': _int64_feature(3),
                 'dmos': _float_feature(float(demos)/10),
-                'type': _int64_feature(int(distort_type)),
                 'image_raw': _bytes_feature(image_raw)
             }
 
@@ -78,7 +91,7 @@ class TID2013Dataset(object):
             print("write:".ljust(10) + str(count) + "Down!".rjust(4))
         writer.close()
 
-    def save_single(self,name, Images, demos, type):
+    def save_single(self,name, Images, demos):
         def _bytes_feature(value):
             """Returns a bytes_list from a string / byte."""
             return tf.train.Feature(bytes_list=tf.train.BytesList(value=[value]))
@@ -105,8 +118,7 @@ class TID2013Dataset(object):
                 'height': _int64_feature(height),
                 'width': _int64_feature(width),
                 'channel': _int64_feature(3),
-                'dmos': _float_feature(float(demos) / 10),
-                'type':_int64_feature(int(type)),
+                'dmos': _float_feature(float(demos) / 5),
                 'image_raw': _bytes_feature(image_raw)
             }
 
@@ -117,35 +129,10 @@ class TID2013Dataset(object):
 
     def get_test_list(self):
         imageList = self._prase_file()
-        imagetype = [i for i in range(1, 26)]
-        # print(imagetype)
-        random.shuffle(imagetype)
 
-        # print(imagetype)
+        train_end = int(8 * (len(imageList)) * 0.1)
+        test_list = imageList[train_end:]
 
-        train_end = int(8 * (len(imagetype)) * 0.1)
-
-        for i in range(0, len(imagetype)):
-            if imagetype[i] < 10:
-                imagetype[i] = 'i0' + str(imagetype[i])
-            else:
-                imagetype[i] = 'i' + str(imagetype[i])
-        #print(imagetype)
-
-        train_ref_list = imagetype[:train_end]
-        test__ref_list = imagetype[train_end:]
-
-        train_list = []
-        test_list = []
-
-        for i in range(0, len(imageList)):
-            image_type = imageList[i][0].split("_")[0]
-            # print(image_type)
-
-            if image_type in train_ref_list:
-                train_list.append(imageList[i])
-            else:
-                test_list.append(imageList[i])
         return test_list
 
     def generateTrainTestDataSet(self,percentage=[8,2]):
@@ -185,14 +172,14 @@ class TID2013Dataset(object):
         self.save(name=self.path_to_train_db,nameList=train_list)
         self.save(name = self.path_to_test_db,nameList=test_list)
 
-    def generateSingleDataset(self,image_name,demos,type):
+    def generateSingleDataset(self,image_name,demos):
         image = Image.open(self.path_to_images + image_name)
         width, height = image.size
 
         # crop image with stride
         crop_images = self._crop_pil_stride(image, 64, 224, 224)
 
-        self.save_single(self.path_to_single_db, crop_images, demos, type)
+        self.save_single(self.path_to_single_db, crop_images, demos)
 
 
     def preprocessing(self, features):
@@ -249,7 +236,7 @@ class TID2013Dataset(object):
         return dataset
 
     def get_single_dataset(self,image_name,demos,type):
-        self.generateSingleDataset(image_name,demos,type)
+        self.generateSingleDataset(image_name,demos)
 
         dataset = tf.data.TFRecordDataset([self.path_to_single_db])
         dataset = dataset.map(self.decode_tfrecord)
@@ -267,7 +254,6 @@ class TID2013Dataset(object):
                                                'width': tf.FixedLenFeature([], tf.int64),
                                                'channel': tf.FixedLenFeature([], tf.int64),
                                                'dmos': tf.FixedLenFeature([], tf.float32),
-                                               'type': tf.FixedLenFeature([],tf.int64),
                                                'image_raw': tf.FixedLenFeature([], tf.string)
                                            })
         return features
@@ -307,6 +293,7 @@ class TID2013Dataset(object):
 
 
 if __name__ == '__main__':
-    dataset = TID2013Dataset(25)
-    dataset.generateTrainTestDataSet()
+    dataset = IrccynDataset(25)
+    dataset._prase_file()
+    #dataset.generateTrainTestDataSet()
 
